@@ -224,3 +224,6 @@ __marimo__/
 
 # Do not track full dataset
 /data
+
+# Directory containing figure artifacts
+/figures
