@@ -1,10 +1,3 @@
-# /// script
-# requires-python = ">=3.12"
-# dependencies = [
-#     "pandas",
-# ]
-# ///
-
 """
 This script creates the supporting dataset for the validation of Task 2.
 
@@ -16,12 +9,15 @@ Author: Anthony Tricarico
 Email: tricarico672@gmail.com
 """
 
+import pandas as pd
 import json
 from pathlib import Path
+import sys
 
-import pandas as pd
+from mathanx.constants import DATA_PATH
 
-from utils.constants import DATA_PATH
+project_root = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(project_root / "src"))
 
 
 def extract_scales_to_dataframe(base_directory: str) -> pd.DataFrame:
@@ -89,6 +85,6 @@ data_path = Path(DATA_PATH).resolve().absolute()
 df_results = extract_scales_to_dataframe(data_path)
 # save as csv
 path_to_csv = Path(
-    "03-processed_data/validations/task-2/call2_dataset.csv").resolve().absolute()
+    "data/processed/validations/task-2/call2_dataset.csv").resolve().absolute()
 df_results.to_csv(path_to_csv, index=False)
 print(df_results.head(15))

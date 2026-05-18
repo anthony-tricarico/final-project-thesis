@@ -8,20 +8,22 @@
 # ]
 # ///
 
-from transformers import BertTokenizer, BertModel
-import torch
+import json
+import re
+import string
+from typing import Any, Dict, List, Literal, Optional
+import unicodedata
+
+import numpy as np
 from pydantic import (
     BaseModel, Field, AliasChoices,
     model_validator, field_validator
 )
-import numpy as np
-import unicodedata
-import string
-import re
-import json
-from typing import Any, Dict, List, Literal, Optional
+import torch
+from transformers import BertTokenizer, BertModel
 
-from utils.constants import MAPPING_CALL1_QUESTIONS  # noqa: E402
+
+from mathanx.constants import FORMA_MENTIS_CUES, MAPPING_CALL1_QUESTIONS  # noqa: E402
 
 TOPIC_POOL = list(MAPPING_CALL1_QUESTIONS.keys())
 

@@ -28,7 +28,6 @@ def _():
     import sys
     from pathlib import Path
     from typing import Dict, List, Optional
-    sys.path.insert(0, str(Path(__file__).parent / "scripts"))
 
     import math
     import matplotlib.pyplot as plt
@@ -39,8 +38,8 @@ def _():
     import pandas as pd
     import seaborn as sns
 
-    from scripts.schemas import Call4Schema
-    from utils.constants import (
+    from mathanx.schemas import Call4Schema
+    from mathanx.constants import (
         MSESR_CORRECT_ANSWERS,
         MODEL_NAME_MAPPING,
     )

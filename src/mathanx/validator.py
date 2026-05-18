@@ -19,15 +19,15 @@ Email: tricarico672@gmail.com
 import json
 import os
 from pathlib import Path
-import sys
+# import sys
 from typing import Any, Dict
 
 from pydantic import ValidationError
 
-from schemas import Call1Schema, Call2Schema, Call3Schema, Call4Schema
-from utils.constants import DATA_PATH, MODEL_NAME_MAPPING
+from mathanx.schemas import Call1Schema, Call2Schema, Call3Schema, Call4Schema
+from mathanx.constants import DATA_PATH, MODEL_NAME_MAPPING
 
-sys.path.append(".")
+# sys.path.append(".")
 
 
 class DataValidator:

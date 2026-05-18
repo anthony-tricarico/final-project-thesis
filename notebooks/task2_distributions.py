@@ -32,7 +32,7 @@ def _(mo):
 @app.cell
 def _(mo):
     mo.callout(
-        mo.md("Note that the dataset used throughout this notebook (`call2_dataset.csv`) is created following the script `generate_call2_dataset.py`. You can refer to that for additional details on how this supporting dataset was created from the original data."),
+        mo.md("Note that the dataset used throughout this notebook (`call2_dataset.csv`) is created following the script `generate_call2_dataset.py`. You can refer to the specific script for additional details on how this supporting dataset was created from the original data."),
         kind="warn"
     )
     return
@@ -50,15 +50,13 @@ def _():
     from pathlib import Path
     import sys
 
-    sys.path.append("scripts/")
-
     import numpy as np
     import pandas as pd
     import matplotlib.pyplot as plt
     from matplotlib.patches import Patch
     from scipy.stats import gaussian_kde
 
-    from scripts.utils.constants import FOLDER_NAME_MAPPING
+    from mathanx.constants import FOLDER_NAME_MAPPING
 
     color_human = '#648fff'
     color_llm = '#fe6100'
@@ -76,9 +74,9 @@ def _():
 
 
 @app.cell
-def _(FOLDER_NAME_MAPPING, pd):
-    df = pd.read_csv(
-        "../../03-processed_data/validations/task-2/call2_dataset.csv")
+def _(FOLDER_NAME_MAPPING, Path, pd):
+    path_call2_dataset = Path("data/processed/validations/task-2/call2_dataset.csv").resolve().absolute()
+    df = pd.read_csv(path_call2_dataset)
     df["Model"] = df["Model"].replace(FOLDER_NAME_MAPPING)
     df.head()
     return (df,)

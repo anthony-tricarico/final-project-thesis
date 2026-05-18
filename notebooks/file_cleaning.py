@@ -27,7 +27,6 @@ def _():
 @app.cell
 def _():
     import sys
-    sys.path.append("scripts")
 
     from datetime import datetime
     import json
@@ -35,9 +34,9 @@ def _():
     from typing import Any, Dict, Set
     import os
 
-    from scripts.schemas import Call1Schema, Call2Schema, Call3Schema, Call4Schema
-    from scripts.utils.constants import FOLDER_NAME_MAPPING
-    from scripts.validator import DataValidator
+    from mathanx.schemas import Call1Schema, Call2Schema, Call3Schema, Call4Schema
+    from mathanx.constants import FOLDER_NAME_MAPPING
+    from mathanx.validator import DataValidator
 
     color_human = '#648fff' 
     color_llm = '#fe6100'

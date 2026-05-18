@@ -129,4 +129,4 @@ FOLDER_NAME_MAPPING = {
 
 # Folder paths
 
-DATA_PATH = "01-original_data/"
+DATA_PATH = "data/raw"
