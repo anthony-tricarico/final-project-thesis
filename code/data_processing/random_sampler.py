@@ -1,10 +1,3 @@
-# /// script
-# requires-python = ">=3.12"
-# dependencies = [
-#     "numpy",
-# ]
-# ///
-
 """
 This module is a utility that produces a list of sampled
 run ids for each model.
@@ -146,7 +139,6 @@ class Sampler:
                     # If flag is off, just dump everything into human_ids to pool them together
                     human_ids.add(run_id)
 
-            # --- REPRODUCIBILITY FIX: Sort the sets into lists before sampling ---
             llm_list = sorted(list(llm_ids))
             human_list = sorted(list(human_ids))
             all_ids = sorted(list(llm_ids | human_ids))
