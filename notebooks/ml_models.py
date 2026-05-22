@@ -18,15 +18,17 @@ def _():
     import shap
     from scipy.cluster.hierarchy import linkage, leaves_list
     from scipy.stats import pearsonr, spearmanr
+    from sklearn.base import BaseEstimator, TransformerMixin
     from sklearn.compose import ColumnTransformer
     from sklearn.dummy import DummyRegressor
     from sklearn.ensemble import HistGradientBoostingRegressor, RandomForestRegressor
     from sklearn.inspection import permutation_importance
+    from sklearn.feature_extraction import FeatureHasher
     from sklearn.linear_model import ElasticNet, Ridge
     from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
     from sklearn.model_selection import GridSearchCV, KFold, RandomizedSearchCV, cross_validate
     from sklearn.pipeline import Pipeline
-    from sklearn.preprocessing import StandardScaler
+    from sklearn.preprocessing import OrdinalEncoder, StandardScaler
     from sklearn.tree import DecisionTreeRegressor
     from xgboost import XGBRegressor
 
@@ -47,15 +49,18 @@ def _():
         "n_observations",
     }
     return (
+        BaseEstimator,
         ColumnTransformer,
         Counter,
         DATASET_PATH,
         DecisionTreeRegressor,
         Dict,
         ElasticNet,
+        FeatureHasher,
         GridSearchCV,
         KFold,
         LEAKAGE_COLS,
+        OrdinalEncoder,
         Path,
         Pipeline,
         RandomForestRegressor,
@@ -63,6 +68,7 @@ def _():
         Ridge,
         StandardScaler,
         TARGET,
+        TransformerMixin,
         XGBRegressor,
         cross_validate,
         leaves_list,
@@ -104,6 +110,52 @@ def _(DATASET_PATH, mo, pd):
     ml_df = pd.read_csv(DATASET_PATH)
     ml_df.head()
     return (ml_df,)
+
+
+@app.cell
+def _(BaseEstimator, FeatureHasher, TransformerMixin, np, pd):
+    class FrequencyEncoder(BaseEstimator, TransformerMixin):
+        def fit(self, X, y=None):
+            series = pd.Series(X.squeeze(), dtype="string").fillna("__missing__")
+            self.feature_name_in_ = getattr(X, "columns", ["city_of_living"])[0]
+            self.frequency_map_ = series.value_counts(normalize=True).to_dict()
+            self.default_value_ = 0.0
+            return self
+
+        def transform(self, X):
+            series = pd.Series(X.squeeze(), dtype="string").fillna("__missing__")
+            encoded = series.map(self.frequency_map_).fillna(self.default_value_).astype(float)
+            return encoded.to_numpy().reshape(-1, 1)
+
+        def get_feature_names_out(self, input_features=None):
+            feature = input_features[0] if input_features else getattr(self, "feature_name_in_", "feature")
+            return np.array([f"{feature}__frequency"])
+
+    class CategoricalHasher(BaseEstimator, TransformerMixin):
+        def __init__(self, n_features=64):
+            self.n_features = n_features
+            self.hasher_ = FeatureHasher(
+                n_features=n_features,
+                input_type="string",
+                alternate_sign=False,
+            )
+
+        def fit(self, X, y=None):
+            self.feature_names_in_ = list(getattr(X, "columns", []))
+            return self
+
+        def transform(self, X):
+            frame = pd.DataFrame(X, columns=self.feature_names_in_).astype("string").fillna("__missing__")
+            docs = [
+                [f"{col}={row[col]}" for col in self.feature_names_in_]
+                for _, row in frame.iterrows()
+            ]
+            return self.hasher_.transform(docs)
+
+        def get_feature_names_out(self, input_features=None):
+            return np.array([f"hash_{i}" for i in range(self.n_features)])
+
+    return CategoricalHasher, FrequencyEncoder
 
 
 @app.cell(hide_code=True)
@@ -176,6 +228,17 @@ def _(mo):
 
 @app.cell
 def _(LEAKAGE_COLS, ml_df, pd):
+    nominal_feature_names = {
+        "gender",
+        "sexual_orientation",
+        "city_of_living",
+        "employment_status",
+        "marital_status",
+        "migration_status",
+        "religious_beliefs",
+        "Model",
+    }
+
     def infer_feature_type(name: str, series: pd.Series) -> str:
         """Categorize the type of the different features to build a feature inventory"""
         values = series.dropna().unique()
@@ -183,6 +246,8 @@ def _(LEAKAGE_COLS, ml_df, pd):
             return "identifier"
         if name in LEAKAGE_COLS:
             return "target_or_leakage"
+        if name in nominal_feature_names:
+            return "nominal_raw"
         if pd.api.types.is_bool_dtype(series) or (series.dropna().isin([0, 1]).all() and len(values) <= 2):
             return "binary"
         if name.endswith("_ord"):
@@ -218,6 +283,12 @@ def _(feature_inventory_df):
 
 
 @app.cell
+def _(feature_inventory_df):
+    print(feature_inventory_df[~(feature_inventory_df["type"].isin(["target_or_leakage", "identifier"]))].drop(columns=["example_values"]).to_latex(index=False))
+    return
+
+
+@app.cell
 def _(feature_type_counts):
     import warnings
     # Ignore int as column name warning
@@ -240,26 +311,46 @@ def _(mo):
 @app.cell
 def _(LEAKAGE_COLS, TARGET, ml_df, pd):
     feature_cols = [c for c in ml_df.columns if c not in LEAKAGE_COLS and c not in {TARGET, "education_vs_parent_mean_gap"}]
+
+    print("Included features:\n", feature_cols)
+
     X = ml_df.loc[:, feature_cols].copy()
     y = ml_df[TARGET].copy()
 
+    nominal_features = [
+        c
+        for c in [
+            "gender",
+            "sexual_orientation",
+            "city_of_living",
+            "employment_status",
+            "marital_status",
+            "migration_status",
+            "religious_beliefs",
+            "Model",
+        ]
+        if c in X.columns
+    ]
+
     binary_features = [c for c in X.columns if set(X[c].dropna().unique()).issubset({0, 1})]
-    numeric_features = [c for c in X.columns if c not in binary_features]
+    numeric_features = [c for c in X.columns if c not in binary_features and c not in nominal_features]
     ordinal_features = [c for c in numeric_features if c.endswith("_ord")]
     continuous_features = [c for c in numeric_features if c not in ordinal_features]
+    tree_nominal_features = [c for c in nominal_features if c != "city_of_living"]
 
     feature_split_df = pd.DataFrame(
         {
-            "group": ["continuous_or_ordinal", "binary_dummies", "all_predictors"],
-            "count": [len(numeric_features), len(binary_features), len(feature_cols)],
+            "group": ["continuous_or_ordinal", "binary_dummies", "nominal_raw", "all_predictors"],
+            "count": [len(numeric_features), len(binary_features), len(nominal_features), len(feature_cols)],
         }
     )
     return (
         X,
-        binary_features,
         continuous_features,
         feature_split_df,
-        ordinal_features,
+        nominal_features,
+        numeric_features,
+        tree_nominal_features,
         y,
     )
 
@@ -456,12 +547,15 @@ def _(mo):
 
 @app.cell
 def _(
+    CategoricalHasher,
     ColumnTransformer,
     Counter,
     DecisionTreeRegressor,
     ElasticNet,
+    FrequencyEncoder,
     GridSearchCV,
     KFold,
+    OrdinalEncoder,
     Pipeline,
     RandomForestRegressor,
     RandomizedSearchCV,
@@ -469,12 +563,12 @@ def _(
     StandardScaler,
     X,
     XGBRegressor,
-    binary_features,
-    continuous_features,
     mean_squared_error,
+    nominal_features,
     np,
-    ordinal_features,
+    numeric_features,
     pd,
+    tree_nominal_features,
     y,
 ):
     RANDOM_STATE = 42
@@ -482,14 +576,14 @@ def _(
     inner_cv = KFold(n_splits=5, shuffle=True, random_state=RANDOM_STATE + 1)
     post_tuning_cv = KFold(n_splits=5, shuffle=True, random_state=RANDOM_STATE + 2)
 
-    scale_features = continuous_features + [c for c in ordinal_features if c not in continuous_features]
-    passthrough_features = binary_features
+    # numeric_features = [c for c in X.columns if c not in nominal_features]
+    scale_features = numeric_features
 
     def build_linear_pipeline(model):
         transformer = ColumnTransformer(
             transformers=[
                 ("scale", StandardScaler(), scale_features),
-                ("pass", "passthrough", passthrough_features),
+                ("hash", CategoricalHasher(n_features=64), nominal_features),
             ],
             remainder="drop",
             verbose_feature_names_out=False,
@@ -497,7 +591,20 @@ def _(
         return Pipeline([("preprocess", transformer), ("model", model)])
 
     def build_tree_pipeline(model):
-        return Pipeline([("model", model)])
+        transformer = ColumnTransformer(
+            transformers=[
+                ("freq_city", FrequencyEncoder(), ["city_of_living"]),
+                (
+                    "ordinal_nominal",
+                    OrdinalEncoder(handle_unknown="use_encoded_value", unknown_value=-1),
+                    tree_nominal_features,
+                ),
+                ("numeric", "passthrough", numeric_features),
+            ],
+            remainder="drop",
+            verbose_feature_names_out=False,
+        )
+        return Pipeline([("preprocess", transformer), ("model", model)])
 
     model_specs = {
         "ridge": {
@@ -819,15 +926,14 @@ def _(
         tree_candidates = tuned_cv_results_df[tuned_cv_results_df["model"].isin(TREE_MODEL_NAMES)].sort_values("mean_rmse")
         shap_model_name = tree_candidates.iloc[0]["model"]
 
-    shap_model_pipeline = model_specs[shap_model_name]["estimator"]
-    shap_model_params = best_params_by_model[shap_model_name]
+    shap_model_pipeline = model_specs[shap_model_name]["estimator"].set_params(**best_params_by_model[shap_model_name])
     shap_selection_df = pd.DataFrame(
         {
             "selected_for_shap": [shap_model_name],
             "best_overall_model": [best_model_name],
         }
     )
-    return shap_model_name, shap_selection_df
+    return shap_model_name, shap_model_pipeline, shap_selection_df
 
 
 @app.cell
@@ -858,17 +964,20 @@ def _(shap_sample_summary):
 
 
 @app.cell
-def _(X, best_params_by_model, model_specs, shap_model_name, y):
-    shap_fitted_model = model_specs[shap_model_name]["estimator"].set_params(**best_params_by_model[shap_model_name])
-    shap_fitted_model.fit(X, y)
+def _(X, shap_model_pipeline, y):
+    shap_fitted_model = shap_model_pipeline.fit(X, y)
+    shap_preprocessor = shap_fitted_model.named_steps["preprocess"]
     shap_tree_estimator = shap_fitted_model.named_steps["model"]
-    return (shap_tree_estimator,)
+    return shap_preprocessor, shap_tree_estimator
 
 
 @app.cell
-def _(X_background, X_shap, shap, shap_tree_estimator):
-    shap_explainer = shap.Explainer(shap_tree_estimator, X_background)
-    shap_values = shap_explainer(X_shap)
+def _(X_background, X_shap, shap, shap_preprocessor, shap_tree_estimator):
+    X_background_transformed = shap_preprocessor.transform(X_background)
+    X_shap_transformed = shap_preprocessor.transform(X_shap)
+    shap_feature_names = shap_preprocessor.get_feature_names_out()
+    shap_explainer = shap.TreeExplainer(shap_tree_estimator, data=X_background_transformed, feature_names=shap_feature_names)
+    shap_values = shap_explainer(X_shap_transformed)
     return (shap_values,)
 
 
