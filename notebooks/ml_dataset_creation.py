@@ -261,10 +261,6 @@ def _(final_ml_dataset, pd, re):
     engineered["math_lover_flg"] = engineered["fav_subjects"].str.contains(r"math", case=False, na=False).astype("int64")
     engineered["math_hater_flg"] = engineered["hat_subjects"].str.contains(r"math", case=False, na=False).astype("int64")
 
-    # Create dummy variables out of the categorical variables. Notice that no assumption about the baseline level is made
-    # at this point. It is left to the modeling phase to pick a baseline for each categorical variable and use it consistenly throughout.
-    engineered = pd.get_dummies(engineered, columns=nominal_cols, drop_first=False, dtype="int64")
-
     # Finally, drop the original columns.
     engineered = engineered.drop(
         columns=[
@@ -277,6 +273,7 @@ def _(final_ml_dataset, pd, re):
             "ocean_extraversion_level",
             "ocean_agreeableness_level",
             "ocean_neuroticism_level",
+            *ocean_score_cols,
             "hobbies",
             "fav_subjects",
             "hat_subjects",
