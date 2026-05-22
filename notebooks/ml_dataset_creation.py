@@ -226,8 +226,6 @@ def _(final_ml_dataset, pd, re):
     engineered["parent_education_mean_ord"] = engineered[["parent_1_education_ord", "parent_2_education_ord"]].mean(axis=1)
     # Compute the education gap between parents
     engineered["parent_education_gap_ord"] = (engineered["parent_1_education_ord"] - engineered["parent_2_education_ord"]).abs()
-    # TODO: consider dropping this feature, too many linear transformations of the same variable
-    engineered["education_vs_parent_mean_gap"] = engineered["education_level_ord"] - engineered["parent_education_mean_ord"]
 
     # Declare which columns make up the OCEAN attributes
     ocean_score_cols = [
