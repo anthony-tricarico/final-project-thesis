@@ -40,6 +40,9 @@ def _():
     # Provide the path to the cleaned dataset, as created by the ml_dataset_creation.py notebook.
     DATASET_PATH = Path("data/processed/ml/ml_dataset.csv").resolve().absolute()
 
+    # Provide the path to where figures should be saved
+    FIG_PATH = Path("figures/").resolve().absolute()
+
     # Specify which columns could introduce leakage in the analysis. These include columns
     # that are linear transformation of the target variable.
     LEAKAGE_COLS = {
@@ -59,6 +62,7 @@ def _():
         DecisionTreeRegressor,
         Dict,
         ElasticNet,
+        FIG_PATH,
         FeatureHasher,
         GridSearchCV,
         KFold,
@@ -868,7 +872,6 @@ def _(
         build_tree_pipeline,
         model_specs,
         post_tuning_cv,
-        scale_features,
     )
 
 
@@ -1193,17 +1196,16 @@ def _(
     build_tree_pipeline,
     nominal_features,
     numeric_features,
-    scale_features,
     tree_nominal_features,
 ):
     # Here is where Model is excluded from the set of features used to train the model
-    nominal_features_no_model = nominal_features
-    nominal_features_no_model.remove("Model")
-    tree_nominal_features_no_model = tree_nominal_features
-    tree_nominal_features_no_model.remove("Model")
+    nominal_features_no_model = [c for c in nominal_features if c != "Model"]
+    tree_nominal_features_no_model = [c for c in tree_nominal_features if c != "Model"]
+    numeric_features_no_model = [c for c in numeric_features if c != "Model"]
+    scale_features_no_model = [c for c in numeric_features_no_model if c not in nominal_features_no_model]
 
-    linear_pipeline_dict = {"scale_features": scale_features, "nominal_features": nominal_features_no_model}
-    tree_pipeline_dict = {"numeric_features": numeric_features, "tree_nominal_features": tree_nominal_features_no_model}
+    linear_pipeline_dict = {"scale_features": scale_features_no_model, "nominal_features": nominal_features_no_model}
+    tree_pipeline_dict = {"numeric_features": numeric_features_no_model, "tree_nominal_features": tree_nominal_features_no_model}
 
     print(linear_pipeline_dict)
     print(tree_pipeline_dict)
@@ -1305,7 +1307,11 @@ def _(
     best_model_params_no_model = best_params_by_model_no_model[best_model_name_no_model]
     best_model_pipeline_no_model = model_specs_no_model[best_model_name_no_model]["estimator"].set_params(**best_model_params_no_model)
     best_model_pipeline_no_model.fit(X, y)
-    return best_model_name_no_model, best_params_by_model_no_model
+    return (
+        best_model_name_no_model,
+        best_params_by_model_no_model,
+        model_summary_df_no_model,
+    )
 
 
 @app.cell
@@ -1336,6 +1342,453 @@ def _(
 @app.cell
 def _(permutation_importance_df_no_model):
     print(permutation_importance_df_no_model)
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## 11. SHAP explainability without `Model`
+
+    Use SHAP beeswarm and global importance plots for the best tree-based no-`Model` refit, or the best tree fallback when the winner is linear.
+    """)
+    return
+
+
+@app.cell
+def _():
+    SHAP_SAMPLE_SIZE_NO_MODEL = 1000
+    SHAP_RANDOM_STATE_NO_MODEL = 42
+    TREE_MODEL_NAMES_NO_MODEL = ["decision_tree", "random_forest", "xgboost"]
+    return (
+        SHAP_RANDOM_STATE_NO_MODEL,
+        SHAP_SAMPLE_SIZE_NO_MODEL,
+        TREE_MODEL_NAMES_NO_MODEL,
+    )
+
+
+@app.cell
+def _(
+    TREE_MODEL_NAMES_NO_MODEL,
+    best_model_name_no_model,
+    best_params_by_model_no_model,
+    model_specs_no_model,
+    model_summary_df_no_model,
+    pd,
+):
+    if best_model_name_no_model in TREE_MODEL_NAMES_NO_MODEL:
+        shap_model_name_no_model = best_model_name_no_model
+    else:
+        tree_candidates_no_model = model_summary_df_no_model[model_summary_df_no_model["model"].isin(TREE_MODEL_NAMES_NO_MODEL)].sort_values("mean_rmse")
+        shap_model_name_no_model = tree_candidates_no_model.iloc[0]["model"]
+
+    shap_model_pipeline_no_model = model_specs_no_model[shap_model_name_no_model]["estimator"].set_params(
+        **best_params_by_model_no_model[shap_model_name_no_model]
+    )
+    shap_selection_df_no_model = pd.DataFrame(
+        {
+            "selected_for_shap": [shap_model_name_no_model],
+            "best_no_model_model": [best_model_name_no_model],
+        }
+    )
+    return (
+        shap_model_name_no_model,
+        shap_model_pipeline_no_model,
+        shap_selection_df_no_model,
+    )
+
+
+@app.cell
+def _(shap_selection_df_no_model):
+    shap_selection_df_no_model
+    return
+
+
+@app.cell
+def _(SHAP_RANDOM_STATE_NO_MODEL, SHAP_SAMPLE_SIZE_NO_MODEL, X, pd):
+    sample_n = min(SHAP_SAMPLE_SIZE_NO_MODEL, len(X))
+    X_shap_no_model = X.sample(n=sample_n, random_state=SHAP_RANDOM_STATE_NO_MODEL).copy()
+    X_background_no_model = X.sample(n=min(200, len(X)), random_state=SHAP_RANDOM_STATE_NO_MODEL + 1).copy()
+    shap_sample_summary_no_model = pd.DataFrame(
+        {
+            "sample_size": [sample_n],
+            "background_size": [len(X_background_no_model)],
+            "feature_count": [X.shape[1]],
+        }
+    )
+    return X_background_no_model, X_shap_no_model, shap_sample_summary_no_model
+
+
+@app.cell
+def _(shap_sample_summary_no_model):
+    shap_sample_summary_no_model
+    return
+
+
+@app.cell
+def _(X, shap_model_pipeline_no_model, y):
+    shap_fitted_model_no_model = shap_model_pipeline_no_model.fit(X, y)
+    shap_preprocessor_no_model = shap_fitted_model_no_model.named_steps["preprocess"]
+    shap_tree_estimator_no_model = shap_fitted_model_no_model.named_steps["model"]
+    return shap_preprocessor_no_model, shap_tree_estimator_no_model
+
+
+@app.cell
+def _(
+    X_background_no_model,
+    X_shap_no_model,
+    shap,
+    shap_preprocessor_no_model,
+    shap_tree_estimator_no_model,
+):
+    X_background_no_model_transformed = shap_preprocessor_no_model.transform(X_background_no_model)
+    X_shap_no_model_transformed = shap_preprocessor_no_model.transform(X_shap_no_model)
+    shap_feature_names_no_model = shap_preprocessor_no_model.get_feature_names_out()
+    shap_explainer_no_model = shap.TreeExplainer(
+        shap_tree_estimator_no_model,
+        data=X_background_no_model_transformed,
+        feature_names=shap_feature_names_no_model,
+    )
+    shap_values_no_model = shap_explainer_no_model(X_shap_no_model_transformed)
+    return (shap_values_no_model,)
+
+
+@app.cell
+def _(FIG_PATH, plt, shap, shap_model_name_no_model, shap_values_no_model):
+    plt.figure(figsize=(12, 8))
+    shap.plots.beeswarm(shap_values_no_model, max_display=20, show=False)
+    plt.title(f"SHAP beeswarm for {shap_model_name_no_model} (without Model)")
+    plt.tight_layout()
+    plt.gcf()
+    plt.savefig(FIG_PATH / "beeswarm_no_model.pdf", format="pdf")
+    return
+
+
+@app.cell
+def _(plt, shap, shap_model_name_no_model, shap_values_no_model):
+    plt.figure(figsize=(12, 8))
+    shap.plots.bar(shap_values_no_model, max_display=20, show=False)
+    plt.title(f"Global SHAP importance for {shap_model_name_no_model} (without Model)")
+    plt.tight_layout()
+    plt.gcf()
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## 12. Nested CV with five predictors
+
+    Re-run the nested cross-validation using only `mseaq_anx`, `amas_score`, `maes_score`, `mseaq_se`, and `confidence_scaled`.
+    """)
+    return
+
+
+@app.cell
+def _(
+    DecisionTreeRegressor,
+    ElasticNet,
+    GridSearchCV,
+    KFold,
+    Pipeline,
+    RandomForestRegressor,
+    RandomizedSearchCV,
+    Ridge,
+    StandardScaler,
+    TARGET,
+    XGBRegressor,
+    build_model_summary_df,
+    build_params_summary_df,
+    mean_squared_error,
+    ml_df,
+    np,
+    pd,
+):
+    five_feature_columns = ["mseaq_anx", "amas_score", "maes_score", "mseaq_se", "confidence_scaled"]
+    X_five = ml_df.loc[:, five_feature_columns].copy()
+    y_five = ml_df[TARGET].copy()
+
+    RANDOM_STATE_FIVE = 42
+    outer_cv_five = KFold(n_splits=5, shuffle=True, random_state=RANDOM_STATE_FIVE)
+    inner_cv_five = KFold(n_splits=5, shuffle=True, random_state=RANDOM_STATE_FIVE + 1)
+
+    def build_linear_pipeline_five(model):
+        return Pipeline([
+            ("scale", StandardScaler()),
+            ("model", model),
+        ])
+
+    def build_tree_pipeline_five(model):
+        return Pipeline([
+            ("model", model),
+        ])
+
+    model_specs_five = {
+        "ridge": {
+            "estimator": build_linear_pipeline_five(Ridge()),
+            "search_cls": GridSearchCV,
+            "search_kwargs": {"param_grid": {"model__alpha": [0.01, 0.1, 1.0, 10.0]}},
+        },
+        "elastic_net": {
+            "estimator": build_linear_pipeline_five(ElasticNet(random_state=RANDOM_STATE_FIVE, max_iter=5000)),
+            "search_cls": GridSearchCV,
+            "search_kwargs": {
+                "param_grid": {"model__alpha": [0.0001, 0.001, 0.01], "model__l1_ratio": [0.1, 0.5, 0.9]}
+            },
+        },
+        "decision_tree": {
+            "estimator": build_tree_pipeline_five(DecisionTreeRegressor(random_state=RANDOM_STATE_FIVE)),
+            "search_cls": RandomizedSearchCV,
+            "search_kwargs": {
+                "param_distributions": {
+                    "model__max_depth": [None, 4, 6, 8, 12],
+                    "model__min_samples_split": [2, 5, 10],
+                    "model__min_samples_leaf": [1, 3, 5],
+                    "model__criterion": ["squared_error", "friedman_mse"],
+                },
+                "n_iter": 10,
+            },
+        },
+        "random_forest": {
+            "estimator": build_tree_pipeline_five(RandomForestRegressor(random_state=RANDOM_STATE_FIVE, n_jobs=1)),
+            "search_cls": RandomizedSearchCV,
+            "search_kwargs": {
+                "param_distributions": {
+                    "model__n_estimators": [200, 400],
+                    "model__max_depth": [None, 10, 20],
+                    "model__min_samples_split": [2, 5, 10],
+                    "model__min_samples_leaf": [1, 3, 5],
+                    "model__max_features": ["sqrt", 0.5],
+                },
+                "n_iter": 10,
+            },
+        },
+        "xgboost": {
+            "estimator": build_tree_pipeline_five(
+                XGBRegressor(
+                    objective="reg:squarederror",
+                    random_state=RANDOM_STATE_FIVE,
+                    n_estimators=300,
+                    n_jobs=1,
+                    tree_method="hist",
+                )
+            ),
+            "search_cls": RandomizedSearchCV,
+            "search_kwargs": {
+                "param_distributions": {
+                    "model__n_estimators": [200, 300, 400],
+                    "model__max_depth": [3, 5, 7],
+                    "model__learning_rate": [0.03, 0.1],
+                    "model__subsample": [0.8, 1.0],
+                    "model__colsample_bytree": [0.8, 1.0],
+                    "model__min_child_weight": [1, 5],
+                    "model__reg_alpha": [0.0, 0.1],
+                    "model__reg_lambda": [1.0, 5.0],
+                },
+                "n_iter": 12,
+            },
+        },
+    }
+
+    def build_search_five(model_name: str):
+        spec = model_specs_five[model_name]
+        search_cls = spec["search_cls"]
+        search_kwargs = dict(spec["search_kwargs"])
+        base_kwargs = {
+            "estimator": spec["estimator"],
+            "cv": inner_cv_five,
+            "scoring": "neg_root_mean_squared_error",
+            "n_jobs": -1,
+            "refit": True,
+        }
+        if search_cls is GridSearchCV:
+            return search_cls(**base_kwargs, **search_kwargs)
+        return search_cls(**base_kwargs, **search_kwargs, random_state=RANDOM_STATE_FIVE)
+
+    def run_nested_cv_five(model_name: str):
+        rows = []
+        for outer_fold, (train_idx, test_idx) in enumerate(outer_cv_five.split(X_five, y_five), start=1):
+            X_train = X_five.iloc[train_idx]
+            X_test = X_five.iloc[test_idx]
+            y_train = y_five.iloc[train_idx]
+            y_test = y_five.iloc[test_idx]
+
+            search = build_search_five(model_name)
+            search.fit(X_train, y_train)
+            best_estimator = search.best_estimator_
+            y_pred = best_estimator.predict(X_test)
+
+            rows.append(
+                {
+                    "model": model_name,
+                    "outer_fold": outer_fold,
+                    "rmse": float(np.sqrt(mean_squared_error(y_test, y_pred))),
+                    "mae": float(np.mean(np.abs(y_test - y_pred))),
+                    "r2": float(best_estimator.score(X_test, y_test)),
+                    "best_params": search.best_params_,
+                    "best_params_repr": repr(search.best_params_),
+                }
+            )
+
+        return pd.DataFrame(rows)
+
+    nested_cv_results_df_five = pd.concat([run_nested_cv_five(model_name) for model_name in model_specs_five], ignore_index=True)
+    model_summary_df_five = build_model_summary_df(nested_cv_results_df_five, metric="mean_rmse")
+    best_params_summary_rows_five, best_params_by_model_five = build_params_summary_df(nested_cv_results_df_five)
+    best_params_summary_df_five = pd.DataFrame(best_params_summary_rows_five).sort_values("model")
+
+    best_model_name_five = model_summary_df_five.iloc[0]["model"]
+    best_model_params_five = best_params_by_model_five[best_model_name_five]
+    best_model_pipeline_five = model_specs_five[best_model_name_five]["estimator"].set_params(**best_model_params_five)
+    best_model_pipeline_five.fit(X_five, y_five)
+    return (
+        X_five,
+        best_model_name_five,
+        best_model_pipeline_five,
+        best_params_summary_df_five,
+        model_summary_df_five,
+    )
+
+
+@app.cell
+def _(model_summary_df_five):
+    model_summary_df_five
+    return
+
+
+@app.cell
+def _(best_params_summary_df_five):
+    best_params_summary_df_five
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## 13. SHAP explainability for five predictors
+
+    Explain the best five-variable model with SHAP, using the transformed matrix for linear models and the raw matrix for tree models.
+    """)
+    return
+
+
+@app.cell
+def _():
+    SHAP_SAMPLE_SIZE_FIVE = 1000
+    SHAP_RANDOM_STATE_FIVE = 42
+    TREE_MODEL_NAMES_FIVE = ["decision_tree", "random_forest", "xgboost"]
+    return SHAP_RANDOM_STATE_FIVE, SHAP_SAMPLE_SIZE_FIVE, TREE_MODEL_NAMES_FIVE
+
+
+@app.cell
+def _(TREE_MODEL_NAMES_FIVE, best_model_name_five, model_summary_df_five, pd):
+    if best_model_name_five in TREE_MODEL_NAMES_FIVE:
+        shap_model_name_five = best_model_name_five
+    else:
+        tree_candidates_five = model_summary_df_five[model_summary_df_five["model"].isin(TREE_MODEL_NAMES_FIVE)].sort_values("mean_rmse")
+        shap_model_name_five = tree_candidates_five.iloc[0]["model"]
+
+    shap_selection_df_five = pd.DataFrame(
+        {
+            "selected_for_shap": [shap_model_name_five],
+            "best_five_feature_model": [best_model_name_five],
+        }
+    )
+    return shap_model_name_five, shap_selection_df_five
+
+
+@app.cell
+def _(shap_selection_df_five):
+    shap_selection_df_five
+    return
+
+
+@app.cell
+def _(SHAP_RANDOM_STATE_FIVE, SHAP_SAMPLE_SIZE_FIVE, X_five, pd):
+    sample_n_five = min(SHAP_SAMPLE_SIZE_FIVE, len(X_five))
+    X_shap_five = X_five.sample(n=sample_n_five, random_state=SHAP_RANDOM_STATE_FIVE).copy()
+    X_background_five = X_five.sample(n=min(200, len(X_five)), random_state=SHAP_RANDOM_STATE_FIVE + 1).copy()
+    shap_sample_summary_five = pd.DataFrame(
+        {
+            "sample_size": [sample_n_five],
+            "background_size": [len(X_background_five)],
+            "feature_count": [X_five.shape[1]],
+        }
+    )
+    return X_background_five, X_shap_five, shap_sample_summary_five
+
+
+@app.cell
+def _(shap_sample_summary_five):
+    shap_sample_summary_five
+    return
+
+
+@app.cell
+def _(best_model_name_five, best_model_pipeline_five):
+    shap_preprocessor_five = None
+    shap_tree_estimator_five = None
+    shap_linear_estimator_five = None
+
+    if best_model_name_five in ["ridge", "elastic_net"]:
+        shap_preprocessor_five = best_model_pipeline_five.named_steps["scale"]
+        shap_linear_estimator_five = best_model_pipeline_five.named_steps["model"]
+    else:
+        shap_tree_estimator_five = best_model_pipeline_five.named_steps["model"]
+    return (
+        shap_linear_estimator_five,
+        shap_preprocessor_five,
+        shap_tree_estimator_five,
+    )
+
+
+@app.cell
+def _(
+    X_background_five,
+    X_shap_five,
+    best_model_name_five,
+    pd,
+    shap,
+    shap_linear_estimator_five,
+    shap_preprocessor_five,
+    shap_tree_estimator_five,
+):
+    if best_model_name_five in ["ridge", "elastic_net"]:
+        X_background_five_transformed = pd.DataFrame(
+            shap_preprocessor_five.transform(X_background_five),
+            columns=X_background_five.columns,
+            index=X_background_five.index,
+        )
+        X_shap_five_transformed = pd.DataFrame(
+            shap_preprocessor_five.transform(X_shap_five),
+            columns=X_shap_five.columns,
+            index=X_shap_five.index,
+        )
+        shap_explainer_five = shap.LinearExplainer(shap_linear_estimator_five, X_background_five_transformed)
+        shap_values_five = shap_explainer_five(X_shap_five_transformed)
+    else:
+        shap_explainer_five = shap.TreeExplainer(shap_tree_estimator_five, data=X_background_five, feature_names=X_background_five.columns)
+        shap_values_five = shap_explainer_five(X_shap_five)
+    return (shap_values_five,)
+
+
+@app.cell
+def _(plt, shap, shap_model_name_five, shap_values_five):
+    plt.figure(figsize=(12, 8))
+    shap.plots.beeswarm(shap_values_five, max_display=20, show=False)
+    plt.title(f"SHAP beeswarm for {shap_model_name_five} (selected predictors)")
+    plt.tight_layout()
+    plt.gcf()
+    return
+
+
+@app.cell
+def _(plt, shap, shap_model_name_five, shap_values_five):
+    plt.figure(figsize=(12, 8))
+    shap.plots.bar(shap_values_five, max_display=20, show=False)
+    plt.title(f"Global SHAP importance for {shap_model_name_five} (selected predictors)")
+    plt.tight_layout()
+    plt.gcf()
     return
 
 
