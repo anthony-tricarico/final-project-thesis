@@ -8,7 +8,7 @@ app = marimo.App(width="medium")
 def _():
     from collections import Counter
     from pathlib import Path
-    from typing import Dict, List, Literal, Tuple
+    from typing import Literal
 
     import marimo as mo
     import matplotlib.pyplot as plt
@@ -17,78 +17,33 @@ def _():
     import seaborn as sns
     import shap
     from scipy.cluster.hierarchy import linkage, leaves_list
-    from scipy.stats import pearsonr, spearmanr
-    from sklearn.base import BaseEstimator, TransformerMixin
-    from sklearn.compose import ColumnTransformer
-    from sklearn.dummy import DummyRegressor
-    from sklearn.ensemble import HistGradientBoostingRegressor, RandomForestRegressor
     from sklearn.inspection import permutation_importance
-    from sklearn.feature_extraction import FeatureHasher
-    from sklearn.linear_model import ElasticNet, Ridge
-    from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
-    from sklearn.model_selection import GridSearchCV, KFold, RandomizedSearchCV, cross_validate
+    from sklearn.model_selection import KFold
     from sklearn.pipeline import Pipeline
-    from sklearn.preprocessing import OrdinalEncoder, StandardScaler
-    from sklearn.tree import DecisionTreeRegressor
-    from xgboost import XGBRegressor
+    from sklearn.preprocessing import StandardScaler
+
+    from mathanx.ml.config import TARGET, DATASET_PATH, FIG_PATH, LEAKAGE_COLS, SHAP_SAMPLE_SIZE, TREE_MODEL_NAMES
 
     # Set theme for plots
     sns.set_theme(style="whitegrid", context="notebook")
-
-    # Specify what the target of the ML models is (y).
-    TARGET = "accuracy"
-    # Provide the path to the cleaned dataset, as created by the ml_dataset_creation.py notebook.
-    DATASET_PATH = Path("data/processed/ml/ml_dataset.csv").resolve().absolute()
-
-    # Provide the path to where figures should be saved
-    FIG_PATH = Path("figures/").resolve().absolute()
-
-    # Specify which columns could introduce leakage in the analysis. These include columns
-    # that are linear transformation of the target variable.
-    LEAKAGE_COLS = {
-        "run_id",
-        "accuracy",
-        "confidence",
-        # "confidence_scaled",
-        "delta_confidence",
-        "total_correct",
-        "n_observations",
-    }
     return (
-        BaseEstimator,
-        ColumnTransformer,
-        Counter,
         DATASET_PATH,
-        DecisionTreeRegressor,
-        Dict,
-        ElasticNet,
         FIG_PATH,
-        FeatureHasher,
-        GridSearchCV,
         KFold,
         LEAKAGE_COLS,
-        List,
         Literal,
-        OrdinalEncoder,
         Path,
         Pipeline,
-        RandomForestRegressor,
-        RandomizedSearchCV,
-        Ridge,
+        SHAP_SAMPLE_SIZE,
         StandardScaler,
         TARGET,
-        TransformerMixin,
-        XGBRegressor,
-        cross_validate,
+        TREE_MODEL_NAMES,
         leaves_list,
         linkage,
-        mean_squared_error,
         mo,
         np,
         pd,
-        permutation_importance,
         plt,
-        shap,
         sns,
     )
 
@@ -119,104 +74,6 @@ def _(DATASET_PATH, mo, pd):
     ml_df = pd.read_csv(DATASET_PATH)
     ml_df.head()
     return (ml_df,)
-
-
-@app.cell
-def _(BaseEstimator, FeatureHasher, TransformerMixin, np, pd):
-    class FrequencyEncoder(BaseEstimator, TransformerMixin):
-        """
-        FrequencyEncoder is the object that handles the encoding of nominal features into numeric features by
-        relying on computing their frequency
-
-        The object inherits from BaseEstimator and TransformerMixin, two objects from the scikit-learn library that
-        make this new object compatible for use in pipelines and training runs.
-        """
-
-        def fit(self, X, y=None):
-            """
-            This method fits the encoder on the city_of_living column in the original dataset.
-            Notice that this method changes internal attributes of the object, returning a new instance
-            of itself.
-            """
-            series = pd.Series(X.squeeze(), dtype="string").fillna("__missing__")
-            # Get the name of the feature
-            self.feature_name_in_ = getattr(X, "columns", ["city_of_living"])[0]
-            # Build the frequency map by counting frequencies and normalizing in a [0,1] range
-            self.frequency_map_ = series.value_counts(normalize=True).to_dict()
-            # Set a default value of 0
-            self.default_value_ = 0.0
-            return self
-
-        def transform(self, X):
-            """
-            This method transforms the specified series by applying the normalized frequency count
-            """
-
-            # Convert a potential matrix into a vector
-            series = pd.Series(X.squeeze(), dtype="string").fillna("__missing__")
-            # Relies on the frequency_map_ obtained during the fit step.
-            encoded = series.map(self.frequency_map_).fillna(self.default_value_).astype(float)
-            # Return the transformed array, ensuring it is a vector of dimension 1
-            return encoded.to_numpy().reshape(-1, 1)
-
-        def get_feature_names_out(self, input_features=None):
-            """
-            This method is used to specify the name of the feature that is used in the model.
-            """
-            # Get the name of the feature if it was passed from the function, else try to extract
-            # it from the object itself, defaulting to a generic "feature" on failure.
-            feature = input_features[0] if input_features else getattr(self, "feature_name_in_", "feature")
-            # Return the name of the feature appending __frequency to it.
-            return np.array([f"{feature}__frequency"])
-
-    class CategoricalHasher(BaseEstimator, TransformerMixin):
-        """
-        This class is used to build a custom CategoricalHasher compatible with the sklearn APIs.
-        """
-
-        def __init__(self, n_features=64):
-            """
-            Initialize the object by picking a number of features.
-            The feature number is the amount of elements that will be in the hashed vector.
-            """
-            self.n_features = n_features
-            # Wrap the sklearn FeatureHasher
-            self.hasher_ = FeatureHasher(
-                # Pass the number of desired features in the output matrix
-                n_features=n_features,
-                # Specify the input type to be string
-                input_type="string",
-                # use alternating sign to preserve dot products in case of name collisions
-                alternate_sign=True,
-            )
-
-        def fit(self, X, y=None):
-            """
-            Specify the features to which the CategoricalHasher should be applied.
-            """
-            # In case X does not contain the columns attribute, default to an empty list
-            self.feature_names_in_ = list(getattr(X, "columns", []))
-            return self
-
-        def transform(self, X):
-            """
-            Transform the target column by applying the hashing function.
-            """
-            # Cast X to a DataFrame with columns of type string. 
-            frame = pd.DataFrame(X, columns=self.feature_names_in_).astype("string").fillna("__missing__")
-            # Build the list of documents by prepending the column name to the value, thus forcing
-            # different hashes for similar values in different columns.
-            docs = [
-                [f"{col}={row[col]}" for col in self.feature_names_in_]
-                for _, row in frame.iterrows()
-            ]
-            # Return the transformed series.
-            return self.hasher_.transform(docs)
-
-        def get_feature_names_out(self, input_features=None):
-            return np.array([f"hash_{i}" for i in range(self.n_features)])
-
-    return CategoricalHasher, FrequencyEncoder
 
 
 @app.cell(hide_code=True)
@@ -369,6 +226,8 @@ def _(mo):
 
 @app.cell
 def _(LEAKAGE_COLS, TARGET, ml_df, pd):
+    from mathanx.ml.helpers import classify_columns
+
     # Filter the features to include only those that do not introduce leakage or are the target themselves
     feature_cols = [c for c in ml_df.columns if c not in LEAKAGE_COLS and c not in {TARGET, "education_vs_parent_mean_gap"}]
 
@@ -379,32 +238,14 @@ def _(LEAKAGE_COLS, TARGET, ml_df, pd):
     X = ml_df.loc[:, feature_cols].copy()
     y = ml_df[TARGET].copy()
 
-    # Pick the nominal features making sure that they are actually present in the dataframe
-    nominal_features = [
-        c
-        for c in [
-            "gender",
-            "sexual_orientation",
-            "city_of_living",
-            "employment_status",
-            "marital_status",
-            "migration_status",
-            "religious_beliefs",
-            "Model",
-        ]
-        if c in X.columns
-    ]
-
-    # Identify binary features as those containing only 0, 1 values
-    binary_features = [c for c in X.columns if set(X[c].dropna().unique()).issubset({0, 1})]
-    # Identify numeric features as those not present in binary or nominal features
-    numeric_features = [c for c in X.columns if c not in binary_features and c not in nominal_features]
-    # identify ordinal features as those ending with _ord
-    ordinal_features = [c for c in numeric_features if c.endswith("_ord")]
-    # continuous features are those features that are numbers but their range extends beyond that of ordinal features
-    continuous_features = [c for c in numeric_features if c not in ordinal_features]
-    # specify the nominal features for tree models. Do not include city of living.
-    tree_nominal_features = [c for c in nominal_features if c != "city_of_living"]
+    # Classify columns into nominal, binary, numeric, etc.
+    col_types = classify_columns(X)
+    nominal_features = col_types["nominal_features"]
+    binary_features = col_types["binary_features"]
+    numeric_features = col_types["numeric_features"]
+    ordinal_features = col_types["ordinal_features"]
+    continuous_features = col_types["continuous_features"]
+    tree_nominal_features = col_types["tree_nominal_features"]
 
     # Check how many features belong to each of the three main categories
     feature_split_df = pd.DataFrame(
@@ -636,273 +477,53 @@ def _(nominal_features, numeric_features, tree_nominal_features):
 
 @app.cell
 def _(
-    CategoricalHasher,
-    ColumnTransformer,
-    Counter,
-    DecisionTreeRegressor,
-    Dict,
-    ElasticNet,
-    FrequencyEncoder,
-    GridSearchCV,
-    KFold,
-    List,
-    Literal,
-    OrdinalEncoder,
-    Pipeline,
-    RandomForestRegressor,
-    RandomizedSearchCV,
-    Ridge,
-    StandardScaler,
     X,
-    XGBRegressor,
-    mean_squared_error,
     nominal_features,
-    np,
     numeric_features,
     pd,
     tree_nominal_features,
     y,
 ):
-    RANDOM_STATE = 42
-    outer_cv = KFold(n_splits=5, shuffle=True, random_state=RANDOM_STATE)
-    inner_cv = KFold(n_splits=5, shuffle=True, random_state=RANDOM_STATE + 1)
-    post_tuning_cv = KFold(n_splits=5, shuffle=True, random_state=RANDOM_STATE + 2)
+    from mathanx.ml.config import RANDOM_STATE
+    from mathanx.ml.helpers import (
+        build_linear_pipeline as _build_linear_pipeline,
+        build_tree_pipeline as _build_tree_pipeline,
+        make_model_specs as _make_model_specs,
+        run_experiment as _run_experiment,
+    )
 
-    # numeric_features = [c for c in X.columns if c not in nominal_features]
-    scale_features = numeric_features
+    _build_linear = lambda m: _build_linear_pipeline(m, numeric_features, nominal_features)
+    _build_tree = lambda m: _build_tree_pipeline(m, numeric_features, tree_nominal_features)
+    model_specs = _make_model_specs(_build_linear, _build_tree, random_state=RANDOM_STATE)
 
-    def build_linear_pipeline(model, features: Dict[str, List[str]] = {"scale_features": scale_features, "nominal_features": nominal_features}):
-        transformer = ColumnTransformer(
-            transformers=[
-                ("scale", StandardScaler(), features["scale_features"]),
-                ("hash", CategoricalHasher(n_features=64), features["nominal_features"]),
-            ],
-            remainder="drop",
-            verbose_feature_names_out=False,
-        )
-        return Pipeline([("preprocess", transformer), ("model", model)])
+    _result = _run_experiment(X, y, model_specs, random_state=RANDOM_STATE)
 
-    def build_tree_pipeline(model, features: Dict[str, List[str]] = {"numeric_features": numeric_features, "tree_nominal_features": tree_nominal_features}):
-        transformer = ColumnTransformer(
-            transformers=[
-                ("freq_city", FrequencyEncoder(), ["city_of_living"]),
-                (
-                    "ordinal_nominal",
-                    OrdinalEncoder(handle_unknown="use_encoded_value", unknown_value=-1),
-                    features["tree_nominal_features"],
-                ),
-                ("numeric", "passthrough", features["numeric_features"]),
-            ],
-            remainder="drop",
-            verbose_feature_names_out=False,
-        )
-        return Pipeline([("preprocess", transformer), ("model", model)])
-
-    model_specs = {
-        "ridge": {
-            "estimator": build_linear_pipeline(Ridge()),
-            "search_cls": GridSearchCV,
-            "search_kwargs": {
-                "param_grid": {
-                    "model__alpha": [0.01, 0.1, 1.0, 10.0],
-                },
-            },
-        },
-        "elastic_net": {
-            "estimator": build_linear_pipeline(ElasticNet(random_state=RANDOM_STATE, max_iter=5000)),
-            "search_cls": GridSearchCV,
-            "search_kwargs": {
-                "param_grid": {
-                    "model__alpha": [0.0001, 0.001, 0.01],
-                    "model__l1_ratio": [0.1, 0.5, 0.9],
-                },
-            },
-        },
-        "decision_tree": {
-            "estimator": build_tree_pipeline(DecisionTreeRegressor(random_state=RANDOM_STATE)),
-            "search_cls": RandomizedSearchCV,
-            "search_kwargs": {
-                "param_distributions": {
-                    "model__max_depth": [None, 4, 6, 8, 12],
-                    "model__min_samples_split": [2, 5, 10],
-                    "model__min_samples_leaf": [1, 3, 5],
-                    "model__criterion": ["squared_error", "friedman_mse"],
-                },
-                "n_iter": 10,
-            },
-        },
-        "random_forest": {
-            "estimator": build_tree_pipeline(RandomForestRegressor(random_state=RANDOM_STATE, n_jobs=1)),
-            "search_cls": RandomizedSearchCV,
-            "search_kwargs": {
-                "param_distributions": {
-                    "model__n_estimators": [200, 400],
-                    "model__max_depth": [None, 10, 20],
-                    "model__min_samples_split": [2, 5, 10],
-                    "model__min_samples_leaf": [1, 3, 5],
-                    "model__max_features": ["sqrt", 0.5],
-                },
-                "n_iter": 10,
-            },
-        },
-        "xgboost": {
-            "estimator": build_tree_pipeline(
-                XGBRegressor(
-                    objective="reg:squarederror",
-                    random_state=RANDOM_STATE,
-                    n_estimators=300,
-                    n_jobs=1,
-                    tree_method="hist",
-                )
-            ),
-            "search_cls": RandomizedSearchCV,
-            "search_kwargs": {
-                "param_distributions": {
-                    "model__n_estimators": [200, 300, 400],
-                    "model__max_depth": [3, 5, 7],
-                    "model__learning_rate": [0.03, 0.1],
-                    "model__subsample": [0.8, 1.0],
-                    "model__colsample_bytree": [0.8, 1.0],
-                    "model__min_child_weight": [1, 5],
-                    "model__reg_alpha": [0.0, 0.1],
-                    "model__reg_lambda": [1.0, 5.0],
-                },
-                "n_iter": 12,
-            },
-        },
-    }
-
-    def build_search(model_name: str, model_specs: Dict[str, Dict[str, List]] = model_specs):
-        spec = model_specs[model_name]
-        search_cls = spec["search_cls"]
-        search_kwargs = dict(spec["search_kwargs"])
-        base_kwargs = {
-            "estimator": spec["estimator"],
-            "cv": inner_cv,
-            "scoring": "neg_root_mean_squared_error",
-            "n_jobs": -1,
-            "refit": True,
-        }
-        if search_cls is GridSearchCV:
-            return search_cls(**base_kwargs, **search_kwargs)
-
-        return search_cls(
-            **base_kwargs,
-            **search_kwargs,
-            random_state=RANDOM_STATE,
-        )
-
-    def run_nested_cv(model_name: str, model_specs: Dict[str, Dict[str, List]] = model_specs):
-        rows = []
-        for outer_fold, (train_idx, test_idx) in enumerate(outer_cv.split(X, y), start=1):
-            X_train = X.iloc[train_idx]
-            X_test = X.iloc[test_idx]
-            y_train = y.iloc[train_idx]
-            y_test = y.iloc[test_idx]
-
-            search = build_search(model_name, model_specs)
-            search.fit(X_train, y_train)
-            best_estimator = search.best_estimator_
-            y_pred = best_estimator.predict(X_test)
-
-            rows.append(
-                {
-                    "model": model_name,
-                    "outer_fold": outer_fold,
-                    "rmse": float(np.sqrt(mean_squared_error(y_test, y_pred))),
-                    "mae": float(np.mean(np.abs(y_test - y_pred))),
-                    "r2": float(best_estimator.score(X_test, y_test)),
-                    "best_params": search.best_params_,
-                    "best_params_repr": repr(search.best_params_),
-                }
-            )
-
-        return pd.DataFrame(rows)
-
-    def build_nested_cv_results_df(model_specs: Dict[str, Dict[str, List]] = model_specs):
-        nested_cv_results_df = pd.concat([run_nested_cv(model_name) for model_name in model_specs], ignore_index=True)
-        return nested_cv_results_df
-
-    def build_model_summary_df(nested_cv_results_df, metric: Literal["mean_rmse", "mean_r2"] = "mean_r2"):
-        """
-        Build a summary of the models where the top model is the one with the better
-        performance according to a specified `metric`.
-
-        `metric` defaults to the mean R^2 score across the different folds.
-        """
-
-        ascending = False if metric == "mean_r2" else True
-
-        model_summary_df = (
-            nested_cv_results_df.groupby("model")
-            .agg(
-                mean_rmse=("rmse", "mean"),
-                std_rmse=("rmse", "std"),
-                mean_mae=("mae", "mean"),
-                mean_r2=("r2", "mean"),
-            )
-            .reset_index()
-            .sort_values(metric, ascending = ascending)
-        )
-        return model_summary_df
-
-    def build_params_summary_df(nested_cv_results_df):
-        best_params_summary_rows = []
-        best_params_by_model = {}
-        for model_name, model_rows in nested_cv_results_df.groupby("model"):
-            modal_repr, count = Counter(model_rows["best_params_repr"]).most_common(1)[0]
-            modal_params = model_rows.loc[model_rows["best_params_repr"] == modal_repr, "best_params"].iloc[0]
-            best_params_by_model[model_name] = modal_params
-            best_params_summary_rows.append(
-                {
-                    "model": model_name,
-                    "best_params_repr": modal_repr,
-                    "support": count,
-                }
-            )
-
-        return best_params_summary_rows, best_params_by_model
+    model_summary_df = _result.model_summary
+    best_params_by_model = _result.best_params_by_model
+    best_model_name = _result.best_model_name
+    best_model_pipeline = _result.final_estimator
+    tuned_cv_results_df = _result.tuned_cv_results
+    permutation_importance_df = _result.permutation_importance
+    top_permutation_importance_df = permutation_importance_df.head(20)
+    best_params_summary_df = pd.DataFrame(_result.best_params_summary_rows).sort_values("model")
 
     return (
         RANDOM_STATE,
-        build_linear_pipeline,
-        build_model_summary_df,
-        build_nested_cv_results_df,
-        build_params_summary_df,
-        build_tree_pipeline,
-        model_specs,
-        post_tuning_cv,
-    )
-
-
-@app.cell
-def _(
-    X,
-    build_model_summary_df,
-    build_nested_cv_results_df,
-    build_params_summary_df,
-    model_specs,
-    pd,
-    y,
-):
-
-
-    nested_cv_results_df = build_nested_cv_results_df()
-    model_summary_df = build_model_summary_df(nested_cv_results_df)
-    best_params_summary_rows, best_params_by_model = build_params_summary_df(nested_cv_results_df)
-
-    best_params_summary_df = pd.DataFrame(best_params_summary_rows).sort_values("model")
-
-    best_model_name = model_summary_df.iloc[0]["model"]
-    best_model_params = best_params_by_model[best_model_name]
-    best_model_pipeline = model_specs[best_model_name]["estimator"].set_params(**best_model_params)
-    best_model_pipeline.fit(X, y)
-    return (
         best_model_name,
         best_params_by_model,
         best_params_summary_df,
+        best_model_pipeline,
+        model_specs,
         model_summary_df,
+        permutation_importance_df,
+        top_permutation_importance_df,
+        tuned_cv_results_df,
     )
+
+
+@app.cell(hide_code=True)
+def _():
+    return
 
 
 @app.cell
@@ -927,85 +548,9 @@ def _(mo):
     return
 
 
-@app.cell
-def _(
-    X,
-    cross_validate,
-    model_specs,
-    pd,
-    permutation_importance,
-    post_tuning_cv,
-    y,
-):
-    def build_tuned_cv_rows(best_params_by_model):
-        tuned_cv_rows = []
-        for model_name, params in best_params_by_model.items():
-            estimator = model_specs[model_name]["estimator"].set_params(**params)
-            cv_scores = cross_validate(
-                estimator,
-                X,
-                y,
-                cv=post_tuning_cv,
-                scoring={
-                    "rmse": "neg_root_mean_squared_error",
-                    "mae": "neg_mean_absolute_error",
-                    "r2": "r2",
-                },
-                n_jobs=-1,
-                return_train_score=False,
-            )
-            tuned_cv_rows.append(
-                {
-                    "model": model_name,
-                    "mean_rmse": float(-cv_scores["test_rmse"].mean()),
-                    "std_rmse": float(cv_scores["test_rmse"].std()),
-                    "mean_mae": float(-cv_scores["test_mae"].mean()),
-                    "mean_r2": float(cv_scores["test_r2"].mean()),
-                    "params": params,
-                }
-            )
-
-        return tuned_cv_rows
-
-    def build_permutation_importance_df(estimator):
-        permutation_result = permutation_importance(estimator, X, y, n_repeats=10, random_state=42, n_jobs=-1)
-        permutation_importance_df = (
-            pd.DataFrame(
-                {
-                    "feature": X.columns,
-                    "importance_mean": permutation_result.importances_mean,
-                    "importance_std": permutation_result.importances_std,
-                }
-            )
-            .sort_values("importance_mean", ascending=False)
-            .reset_index(drop=True)
-        )
-        return permutation_importance_df
-
-    return build_permutation_importance_df, build_tuned_cv_rows
-
-
-@app.cell
-def _(
-    X,
-    best_model_name,
-    best_params_by_model,
-    build_permutation_importance_df,
-    build_tuned_cv_rows,
-    model_specs,
-    pd,
-    y,
-):
-    tuned_cv_rows = build_tuned_cv_rows(best_params_by_model)
-    tuned_cv_results_df = pd.DataFrame(tuned_cv_rows).sort_values("mean_r2", ascending=False)
-
-    final_estimator = model_specs[best_model_name]["estimator"].set_params(**best_params_by_model[best_model_name])
-    final_estimator.fit(X, y)
-
-    permutation_importance_df = build_permutation_importance_df(final_estimator)
-
-    top_permutation_importance_df = permutation_importance_df.head(20)
-    return top_permutation_importance_df, tuned_cv_results_df
+@app.cell(hide_code=True)
+def _():
+    return
 
 
 @app.cell
@@ -1075,10 +620,8 @@ def _(mo):
 
 
 @app.cell
-def _():
-    SHAP_SAMPLE_SIZE = 1000
+def _(SHAP_SAMPLE_SIZE, TREE_MODEL_NAMES):
     SHAP_RANDOM_STATE = 42
-    TREE_MODEL_NAMES = ["decision_tree", "random_forest", "xgboost"]
     return SHAP_RANDOM_STATE, SHAP_SAMPLE_SIZE, TREE_MODEL_NAMES
 
 
@@ -1088,87 +631,32 @@ def _(
     best_model_name,
     best_params_by_model,
     model_specs,
-    pd,
     tuned_cv_results_df,
+    y,
 ):
-    if best_model_name in TREE_MODEL_NAMES:
-        shap_model_name = best_model_name
-    else:
-        tree_candidates = tuned_cv_results_df[tuned_cv_results_df["model"].isin(TREE_MODEL_NAMES)].sort_values("mean_rmse")
-        shap_model_name = tree_candidates.iloc[0]["model"]
+    from mathanx.ml.helpers import run_shap_analysis as _run_shap_analysis
 
-    shap_model_pipeline = model_specs[shap_model_name]["estimator"].set_params(**best_params_by_model[shap_model_name])
-    shap_selection_df = pd.DataFrame(
-        {
-            "selected_for_shap": [shap_model_name],
-            "best_overall_model": [best_model_name],
-        }
+    shap_values, shap_model_name = _run_shap_analysis(
+        X, y, model_specs, best_model_name, best_params_by_model,
+        tuned_cv_results_df, TREE_MODEL_NAMES,
+        shap_sample_size=SHAP_SAMPLE_SIZE, shap_random_state=SHAP_RANDOM_STATE,
     )
-    return shap_model_name, shap_model_pipeline, shap_selection_df
+    return shap_values, shap_model_name
 
 
 @app.cell
-def _(shap_selection_df):
-    shap_selection_df
+def _(shap_model_name, shap_values):
+    from mathanx.ml.helpers import plot_shap_beeswarm as _plot_shap_beeswarm
+
+    _plot_shap_beeswarm(shap_values, f"SHAP beeswarm for {shap_model_name}")
     return
 
 
 @app.cell
-def _(SHAP_RANDOM_STATE, SHAP_SAMPLE_SIZE, X, pd):
-    sample_n = min(SHAP_SAMPLE_SIZE, len(X))
-    X_shap = X.sample(n=sample_n, random_state=SHAP_RANDOM_STATE).copy()
-    X_background = X.sample(n=min(200, len(X)), random_state=SHAP_RANDOM_STATE + 1).copy()
-    shap_sample_summary = pd.DataFrame(
-        {
-            "sample_size": [sample_n],
-            "background_size": [len(X_background)],
-            "feature_count": [X.shape[1]],
-        }
-    )
-    return X_background, X_shap, shap_sample_summary
+def _(shap_model_name, shap_values):
+    from mathanx.ml.helpers import plot_shap_bar as _plot_shap_bar
 
-
-@app.cell
-def _(shap_sample_summary):
-    shap_sample_summary
-    return
-
-
-@app.cell
-def _(X, shap_model_pipeline, y):
-    shap_fitted_model = shap_model_pipeline.fit(X, y)
-    shap_preprocessor = shap_fitted_model.named_steps["preprocess"]
-    shap_tree_estimator = shap_fitted_model.named_steps["model"]
-    return shap_preprocessor, shap_tree_estimator
-
-
-@app.cell
-def _(X_background, X_shap, shap, shap_preprocessor, shap_tree_estimator):
-    X_background_transformed = shap_preprocessor.transform(X_background)
-    X_shap_transformed = shap_preprocessor.transform(X_shap)
-    shap_feature_names = shap_preprocessor.get_feature_names_out()
-    shap_explainer = shap.TreeExplainer(shap_tree_estimator, data=X_background_transformed, feature_names=shap_feature_names)
-    shap_values = shap_explainer(X_shap_transformed)
-    return (shap_values,)
-
-
-@app.cell
-def _(plt, shap, shap_model_name, shap_values):
-    plt.figure(figsize=(12, 8))
-    shap.plots.beeswarm(shap_values, max_display=20, show=False)
-    plt.title(f"SHAP beeswarm for {shap_model_name}")
-    plt.tight_layout()
-    plt.gcf()
-    return
-
-
-@app.cell
-def _(plt, shap, shap_model_name, shap_values):
-    plt.figure(figsize=(12, 8))
-    shap.plots.bar(shap_values, max_display=20, show=False)
-    plt.title(f"Global SHAP importance for {shap_model_name}")
-    plt.tight_layout()
-    plt.gcf()
+    _plot_shap_bar(shap_values, f"Global SHAP importance for {shap_model_name}")
     return
 
 
@@ -1183,160 +671,51 @@ def _(mo):
 
 
 @app.cell
-def _(
-    DecisionTreeRegressor,
-    ElasticNet,
-    GridSearchCV,
-    RANDOM_STATE,
-    RandomForestRegressor,
-    RandomizedSearchCV,
-    Ridge,
-    XGBRegressor,
-    build_linear_pipeline,
-    build_tree_pipeline,
-    nominal_features,
-    numeric_features,
-    tree_nominal_features,
-):
+def _(RANDOM_STATE, nominal_features, numeric_features, tree_nominal_features):
+    from mathanx.ml.helpers import (
+        build_linear_pipeline as _build_linear_pipeline,
+        build_tree_pipeline as _build_tree_pipeline,
+        make_model_specs as _make_model_specs,
+    )
+
     # Here is where Model is excluded from the set of features used to train the model
     nominal_features_no_model = [c for c in nominal_features if c != "Model"]
     tree_nominal_features_no_model = [c for c in tree_nominal_features if c != "Model"]
     numeric_features_no_model = [c for c in numeric_features if c != "Model"]
-    scale_features_no_model = [c for c in numeric_features_no_model if c not in nominal_features_no_model]
 
-    linear_pipeline_dict = {"scale_features": scale_features_no_model, "nominal_features": nominal_features_no_model}
-    tree_pipeline_dict = {"numeric_features": numeric_features_no_model, "tree_nominal_features": tree_nominal_features_no_model}
-
-    print(linear_pipeline_dict)
-    print(tree_pipeline_dict)
-
-    model_specs_no_model = {
-        "ridge": {
-            "estimator": build_linear_pipeline(Ridge(), linear_pipeline_dict),
-            "search_cls": GridSearchCV,
-            "search_kwargs": {
-                "param_grid": {
-                    "model__alpha": [0.01, 0.1, 1.0, 10.0],
-                },
-            },
-        },
-        "elastic_net": {
-            "estimator": build_linear_pipeline(ElasticNet(random_state=RANDOM_STATE, max_iter=5000), linear_pipeline_dict),
-            "search_cls": GridSearchCV,
-            "search_kwargs": {
-                "param_grid": {
-                    "model__alpha": [0.0001, 0.001, 0.01],
-                    "model__l1_ratio": [0.1, 0.5, 0.9],
-                },
-            },
-        },
-        "decision_tree": {
-            "estimator": build_tree_pipeline(DecisionTreeRegressor(random_state=RANDOM_STATE), tree_pipeline_dict),
-            "search_cls": RandomizedSearchCV,
-            "search_kwargs": {
-                "param_distributions": {
-                    "model__max_depth": [None, 4, 6, 8, 12],
-                    "model__min_samples_split": [2, 5, 10],
-                    "model__min_samples_leaf": [1, 3, 5],
-                    "model__criterion": ["squared_error", "friedman_mse"],
-                },
-                "n_iter": 10,
-            },
-        },
-        "random_forest": {
-            "estimator": build_tree_pipeline(RandomForestRegressor(random_state=RANDOM_STATE, n_jobs=1), tree_pipeline_dict),
-            "search_cls": RandomizedSearchCV,
-            "search_kwargs": {
-                "param_distributions": {
-                    "model__n_estimators": [200, 400],
-                    "model__max_depth": [None, 10, 20],
-                    "model__min_samples_split": [2, 5, 10],
-                    "model__min_samples_leaf": [1, 3, 5],
-                    "model__max_features": ["sqrt", 0.5],
-                },
-                "n_iter": 10,
-            },
-        },
-        "xgboost": {
-            "estimator": build_tree_pipeline(
-                XGBRegressor(
-                    objective="reg:squarederror",
-                    random_state=RANDOM_STATE,
-                    n_estimators=300,
-                    n_jobs=1,
-                    tree_method="hist",
-                ),
-                tree_pipeline_dict
-            ),
-            "search_cls": RandomizedSearchCV,
-            "search_kwargs": {
-                "param_distributions": {
-                    "model__n_estimators": [200, 300, 400],
-                    "model__max_depth": [3, 5, 7],
-                    "model__learning_rate": [0.03, 0.1],
-                    "model__subsample": [0.8, 1.0],
-                    "model__colsample_bytree": [0.8, 1.0],
-                    "model__min_child_weight": [1, 5],
-                    "model__reg_alpha": [0.0, 0.1],
-                    "model__reg_lambda": [1.0, 5.0],
-                },
-                "n_iter": 12,
-            },
-        },
-    }
+    _build_linear_no_model = lambda m: _build_linear_pipeline(m, numeric_features_no_model, nominal_features_no_model)
+    _build_tree_no_model = lambda m: _build_tree_pipeline(m, numeric_features_no_model, tree_nominal_features_no_model)
+    model_specs_no_model = _make_model_specs(_build_linear_no_model, _build_tree_no_model, random_state=RANDOM_STATE)
     return (model_specs_no_model,)
 
 
 @app.cell
 def _(
     X,
-    build_model_summary_df,
-    build_nested_cv_results_df,
-    build_params_summary_df,
     model_specs_no_model,
-    pd,
     y,
 ):
-    nested_cv_results_df_no_model = build_nested_cv_results_df(model_specs_no_model)
-    model_summary_df_no_model = build_model_summary_df(nested_cv_results_df_no_model)
-    best_params_summary_rows_no_model, best_params_by_model_no_model = build_params_summary_df(nested_cv_results_df_no_model)
+    from mathanx.ml.config import RANDOM_STATE as RANDOM_STATE_NO_MODEL
+    from mathanx.ml.helpers import run_experiment as _run_experiment_no_model
 
-    best_params_summary_df_no_model = pd.DataFrame(best_params_summary_rows_no_model).sort_values("model")
+    _result_no_model = _run_experiment_no_model(X, y, model_specs_no_model, random_state=RANDOM_STATE_NO_MODEL)
 
-    best_model_name_no_model = model_summary_df_no_model.iloc[0]["model"]
-    best_model_params_no_model = best_params_by_model_no_model[best_model_name_no_model]
-    best_model_pipeline_no_model = model_specs_no_model[best_model_name_no_model]["estimator"].set_params(**best_model_params_no_model)
-    best_model_pipeline_no_model.fit(X, y)
+    model_summary_df_no_model = _result_no_model.model_summary
+    best_params_by_model_no_model = _result_no_model.best_params_by_model
+    best_model_name_no_model = _result_no_model.best_model_name
+    permutation_importance_df_no_model = _result_no_model.permutation_importance
+
     return (
         best_model_name_no_model,
         best_params_by_model_no_model,
         model_summary_df_no_model,
+        permutation_importance_df_no_model,
     )
 
 
-@app.cell
-def _(
-    X,
-    best_model_name_no_model,
-    best_params_by_model_no_model,
-    build_permutation_importance_df,
-    build_tuned_cv_rows,
-    model_specs_no_model,
-    pd,
-    y,
-):
-    tuned_cv_rows_no_model = build_tuned_cv_rows(best_params_by_model_no_model)
-    tuned_cv_results_df_no_model = pd.DataFrame(tuned_cv_rows_no_model).sort_values("mean_r2", ascending=False)
-
-    final_estimator_no_model = model_specs_no_model[best_model_name_no_model]["estimator"]\
-        .set_params(**best_params_by_model_no_model[best_model_name_no_model])
-
-    final_estimator_no_model.fit(X, y)
-
-    permutation_importance_df_no_model = build_permutation_importance_df(final_estimator_no_model)
-
-    top_permutation_importance_df_no_model = permutation_importance_df_no_model.head(20)
-    return (permutation_importance_df_no_model,)
+@app.cell(hide_code=True)
+def _():
+    return
 
 
 @app.cell
@@ -1356,10 +735,10 @@ def _(mo):
 
 
 @app.cell
-def _():
-    SHAP_SAMPLE_SIZE_NO_MODEL = 1000
+def _(SHAP_SAMPLE_SIZE, TREE_MODEL_NAMES):
+    SHAP_SAMPLE_SIZE_NO_MODEL = SHAP_SAMPLE_SIZE
     SHAP_RANDOM_STATE_NO_MODEL = 42
-    TREE_MODEL_NAMES_NO_MODEL = ["decision_tree", "random_forest", "xgboost"]
+    TREE_MODEL_NAMES_NO_MODEL = TREE_MODEL_NAMES
     return (
         SHAP_RANDOM_STATE_NO_MODEL,
         SHAP_SAMPLE_SIZE_NO_MODEL,
@@ -1369,108 +748,42 @@ def _():
 
 @app.cell
 def _(
+    SHAP_RANDOM_STATE_NO_MODEL,
+    SHAP_SAMPLE_SIZE_NO_MODEL,
     TREE_MODEL_NAMES_NO_MODEL,
+    X,
     best_model_name_no_model,
     best_params_by_model_no_model,
     model_specs_no_model,
     model_summary_df_no_model,
-    pd,
+    y,
 ):
-    if best_model_name_no_model in TREE_MODEL_NAMES_NO_MODEL:
-        shap_model_name_no_model = best_model_name_no_model
-    else:
-        tree_candidates_no_model = model_summary_df_no_model[model_summary_df_no_model["model"].isin(TREE_MODEL_NAMES_NO_MODEL)].sort_values("mean_rmse")
-        shap_model_name_no_model = tree_candidates_no_model.iloc[0]["model"]
+    from mathanx.ml.helpers import run_shap_analysis as _run_shap_analysis
 
-    shap_model_pipeline_no_model = model_specs_no_model[shap_model_name_no_model]["estimator"].set_params(
-        **best_params_by_model_no_model[shap_model_name_no_model]
+    shap_values_no_model, shap_model_name_no_model = _run_shap_analysis(
+        X, y, model_specs_no_model, best_model_name_no_model,
+        best_params_by_model_no_model, model_summary_df_no_model,
+        TREE_MODEL_NAMES_NO_MODEL,
+        shap_sample_size=SHAP_SAMPLE_SIZE_NO_MODEL,
+        shap_random_state=SHAP_RANDOM_STATE_NO_MODEL,
     )
-    shap_selection_df_no_model = pd.DataFrame(
-        {
-            "selected_for_shap": [shap_model_name_no_model],
-            "best_no_model_model": [best_model_name_no_model],
-        }
-    )
-    return (
-        shap_model_name_no_model,
-        shap_model_pipeline_no_model,
-        shap_selection_df_no_model,
-    )
+    return shap_values_no_model, shap_model_name_no_model
 
 
 @app.cell
-def _(shap_selection_df_no_model):
-    shap_selection_df_no_model
+def _(FIG_PATH, shap_model_name_no_model, shap_values_no_model):
+    from mathanx.ml.helpers import plot_shap_beeswarm as _plot_shap_beeswarm
+
+    _fig = _plot_shap_beeswarm(shap_values_no_model, f"SHAP beeswarm for {shap_model_name_no_model} (without Model)")
+    _fig.savefig(FIG_PATH / "beeswarm_no_model.pdf", format="pdf")
     return
 
 
 @app.cell
-def _(SHAP_RANDOM_STATE_NO_MODEL, SHAP_SAMPLE_SIZE_NO_MODEL, X, pd):
-    sample_n = min(SHAP_SAMPLE_SIZE_NO_MODEL, len(X))
-    X_shap_no_model = X.sample(n=sample_n, random_state=SHAP_RANDOM_STATE_NO_MODEL).copy()
-    X_background_no_model = X.sample(n=min(200, len(X)), random_state=SHAP_RANDOM_STATE_NO_MODEL + 1).copy()
-    shap_sample_summary_no_model = pd.DataFrame(
-        {
-            "sample_size": [sample_n],
-            "background_size": [len(X_background_no_model)],
-            "feature_count": [X.shape[1]],
-        }
-    )
-    return X_background_no_model, X_shap_no_model, shap_sample_summary_no_model
+def _(shap_model_name_no_model, shap_values_no_model):
+    from mathanx.ml.helpers import plot_shap_bar as _plot_shap_bar
 
-
-@app.cell
-def _(shap_sample_summary_no_model):
-    shap_sample_summary_no_model
-    return
-
-
-@app.cell
-def _(X, shap_model_pipeline_no_model, y):
-    shap_fitted_model_no_model = shap_model_pipeline_no_model.fit(X, y)
-    shap_preprocessor_no_model = shap_fitted_model_no_model.named_steps["preprocess"]
-    shap_tree_estimator_no_model = shap_fitted_model_no_model.named_steps["model"]
-    return shap_preprocessor_no_model, shap_tree_estimator_no_model
-
-
-@app.cell
-def _(
-    X_background_no_model,
-    X_shap_no_model,
-    shap,
-    shap_preprocessor_no_model,
-    shap_tree_estimator_no_model,
-):
-    X_background_no_model_transformed = shap_preprocessor_no_model.transform(X_background_no_model)
-    X_shap_no_model_transformed = shap_preprocessor_no_model.transform(X_shap_no_model)
-    shap_feature_names_no_model = shap_preprocessor_no_model.get_feature_names_out()
-    shap_explainer_no_model = shap.TreeExplainer(
-        shap_tree_estimator_no_model,
-        data=X_background_no_model_transformed,
-        feature_names=shap_feature_names_no_model,
-    )
-    shap_values_no_model = shap_explainer_no_model(X_shap_no_model_transformed)
-    return (shap_values_no_model,)
-
-
-@app.cell
-def _(FIG_PATH, plt, shap, shap_model_name_no_model, shap_values_no_model):
-    plt.figure(figsize=(12, 8))
-    shap.plots.beeswarm(shap_values_no_model, max_display=20, show=False)
-    plt.title(f"SHAP beeswarm for {shap_model_name_no_model} (without Model)")
-    plt.tight_layout()
-    plt.gcf()
-    plt.savefig(FIG_PATH / "beeswarm_no_model.pdf", format="pdf")
-    return
-
-
-@app.cell
-def _(plt, shap, shap_model_name_no_model, shap_values_no_model):
-    plt.figure(figsize=(12, 8))
-    shap.plots.bar(shap_values_no_model, max_display=20, show=False)
-    plt.title(f"Global SHAP importance for {shap_model_name_no_model} (without Model)")
-    plt.tight_layout()
-    plt.gcf()
+    _plot_shap_bar(shap_values_no_model, f"Global SHAP importance for {shap_model_name_no_model} (without Model)")
     return
 
 
@@ -1486,167 +799,39 @@ def _(mo):
 
 @app.cell
 def _(
-    DecisionTreeRegressor,
-    ElasticNet,
-    GridSearchCV,
-    KFold,
     Pipeline,
-    RandomForestRegressor,
-    RandomizedSearchCV,
-    Ridge,
     StandardScaler,
     TARGET,
-    XGBRegressor,
-    build_model_summary_df,
-    build_params_summary_df,
-    mean_squared_error,
     ml_df,
-    np,
     pd,
 ):
+    from mathanx.ml.config import RANDOM_STATE as RANDOM_STATE_FIVE
+    from mathanx.ml.helpers import make_model_specs as _make_model_specs_five, run_experiment as _run_experiment_five
+
     five_feature_columns = ["mseaq_anx", "amas_score", "maes_score", "mseaq_se", "confidence_scaled"]
     X_five = ml_df.loc[:, five_feature_columns].copy()
     y_five = ml_df[TARGET].copy()
 
-    RANDOM_STATE_FIVE = 42
-    outer_cv_five = KFold(n_splits=5, shuffle=True, random_state=RANDOM_STATE_FIVE)
-    inner_cv_five = KFold(n_splits=5, shuffle=True, random_state=RANDOM_STATE_FIVE + 1)
+    build_linear_five = lambda m: Pipeline([("scale", StandardScaler()), ("model", m)])
+    build_tree_five = lambda m: Pipeline([("model", m)])
+    model_specs_five = _make_model_specs_five(build_linear_five, build_tree_five, random_state=RANDOM_STATE_FIVE)
 
-    def build_linear_pipeline_five(model):
-        return Pipeline([
-            ("scale", StandardScaler()),
-            ("model", model),
-        ])
+    _result_five = _run_experiment_five(X_five, y_five, model_specs_five, random_state=RANDOM_STATE_FIVE)
 
-    def build_tree_pipeline_five(model):
-        return Pipeline([
-            ("model", model),
-        ])
-
-    model_specs_five = {
-        "ridge": {
-            "estimator": build_linear_pipeline_five(Ridge()),
-            "search_cls": GridSearchCV,
-            "search_kwargs": {"param_grid": {"model__alpha": [0.01, 0.1, 1.0, 10.0]}},
-        },
-        "elastic_net": {
-            "estimator": build_linear_pipeline_five(ElasticNet(random_state=RANDOM_STATE_FIVE, max_iter=5000)),
-            "search_cls": GridSearchCV,
-            "search_kwargs": {
-                "param_grid": {"model__alpha": [0.0001, 0.001, 0.01], "model__l1_ratio": [0.1, 0.5, 0.9]}
-            },
-        },
-        "decision_tree": {
-            "estimator": build_tree_pipeline_five(DecisionTreeRegressor(random_state=RANDOM_STATE_FIVE)),
-            "search_cls": RandomizedSearchCV,
-            "search_kwargs": {
-                "param_distributions": {
-                    "model__max_depth": [None, 4, 6, 8, 12],
-                    "model__min_samples_split": [2, 5, 10],
-                    "model__min_samples_leaf": [1, 3, 5],
-                    "model__criterion": ["squared_error", "friedman_mse"],
-                },
-                "n_iter": 10,
-            },
-        },
-        "random_forest": {
-            "estimator": build_tree_pipeline_five(RandomForestRegressor(random_state=RANDOM_STATE_FIVE, n_jobs=1)),
-            "search_cls": RandomizedSearchCV,
-            "search_kwargs": {
-                "param_distributions": {
-                    "model__n_estimators": [200, 400],
-                    "model__max_depth": [None, 10, 20],
-                    "model__min_samples_split": [2, 5, 10],
-                    "model__min_samples_leaf": [1, 3, 5],
-                    "model__max_features": ["sqrt", 0.5],
-                },
-                "n_iter": 10,
-            },
-        },
-        "xgboost": {
-            "estimator": build_tree_pipeline_five(
-                XGBRegressor(
-                    objective="reg:squarederror",
-                    random_state=RANDOM_STATE_FIVE,
-                    n_estimators=300,
-                    n_jobs=1,
-                    tree_method="hist",
-                )
-            ),
-            "search_cls": RandomizedSearchCV,
-            "search_kwargs": {
-                "param_distributions": {
-                    "model__n_estimators": [200, 300, 400],
-                    "model__max_depth": [3, 5, 7],
-                    "model__learning_rate": [0.03, 0.1],
-                    "model__subsample": [0.8, 1.0],
-                    "model__colsample_bytree": [0.8, 1.0],
-                    "model__min_child_weight": [1, 5],
-                    "model__reg_alpha": [0.0, 0.1],
-                    "model__reg_lambda": [1.0, 5.0],
-                },
-                "n_iter": 12,
-            },
-        },
-    }
-
-    def build_search_five(model_name: str):
-        spec = model_specs_five[model_name]
-        search_cls = spec["search_cls"]
-        search_kwargs = dict(spec["search_kwargs"])
-        base_kwargs = {
-            "estimator": spec["estimator"],
-            "cv": inner_cv_five,
-            "scoring": "neg_root_mean_squared_error",
-            "n_jobs": -1,
-            "refit": True,
-        }
-        if search_cls is GridSearchCV:
-            return search_cls(**base_kwargs, **search_kwargs)
-        return search_cls(**base_kwargs, **search_kwargs, random_state=RANDOM_STATE_FIVE)
-
-    def run_nested_cv_five(model_name: str):
-        rows = []
-        for outer_fold, (train_idx, test_idx) in enumerate(outer_cv_five.split(X_five, y_five), start=1):
-            X_train = X_five.iloc[train_idx]
-            X_test = X_five.iloc[test_idx]
-            y_train = y_five.iloc[train_idx]
-            y_test = y_five.iloc[test_idx]
-
-            search = build_search_five(model_name)
-            search.fit(X_train, y_train)
-            best_estimator = search.best_estimator_
-            y_pred = best_estimator.predict(X_test)
-
-            rows.append(
-                {
-                    "model": model_name,
-                    "outer_fold": outer_fold,
-                    "rmse": float(np.sqrt(mean_squared_error(y_test, y_pred))),
-                    "mae": float(np.mean(np.abs(y_test - y_pred))),
-                    "r2": float(best_estimator.score(X_test, y_test)),
-                    "best_params": search.best_params_,
-                    "best_params_repr": repr(search.best_params_),
-                }
-            )
-
-        return pd.DataFrame(rows)
-
-    nested_cv_results_df_five = pd.concat([run_nested_cv_five(model_name) for model_name in model_specs_five], ignore_index=True)
-    model_summary_df_five = build_model_summary_df(nested_cv_results_df_five, metric="mean_rmse")
-    best_params_summary_rows_five, best_params_by_model_five = build_params_summary_df(nested_cv_results_df_five)
-    best_params_summary_df_five = pd.DataFrame(best_params_summary_rows_five).sort_values("model")
-
-    best_model_name_five = model_summary_df_five.iloc[0]["model"]
-    best_model_params_five = best_params_by_model_five[best_model_name_five]
-    best_model_pipeline_five = model_specs_five[best_model_name_five]["estimator"].set_params(**best_model_params_five)
-    best_model_pipeline_five.fit(X_five, y_five)
+    model_summary_df_five = _result_five.model_summary
+    best_params_by_model_five = _result_five.best_params_by_model
+    best_model_name_five = _result_five.best_model_name
+    best_model_pipeline_five = _result_five.final_estimator
+    best_params_summary_df_five = pd.DataFrame(_result_five.best_params_summary_rows).sort_values("model")
+    permutation_importance_df_five = _result_five.permutation_importance
     return (
         X_five,
         best_model_name_five,
         best_model_pipeline_five,
         best_params_summary_df_five,
         model_summary_df_five,
+        permutation_importance_df_five,
+        y_five,
     )
 
 
@@ -1673,122 +858,97 @@ def _(mo):
 
 
 @app.cell
-def _():
-    SHAP_SAMPLE_SIZE_FIVE = 1000
+def _(SHAP_SAMPLE_SIZE, TREE_MODEL_NAMES):
+    SHAP_SAMPLE_SIZE_FIVE = SHAP_SAMPLE_SIZE
     SHAP_RANDOM_STATE_FIVE = 42
-    TREE_MODEL_NAMES_FIVE = ["decision_tree", "random_forest", "xgboost"]
+    TREE_MODEL_NAMES_FIVE = TREE_MODEL_NAMES
     return SHAP_RANDOM_STATE_FIVE, SHAP_SAMPLE_SIZE_FIVE, TREE_MODEL_NAMES_FIVE
 
 
 @app.cell
-def _(TREE_MODEL_NAMES_FIVE, best_model_name_five, model_summary_df_five, pd):
-    if best_model_name_five in TREE_MODEL_NAMES_FIVE:
-        shap_model_name_five = best_model_name_five
-    else:
-        tree_candidates_five = model_summary_df_five[model_summary_df_five["model"].isin(TREE_MODEL_NAMES_FIVE)].sort_values("mean_rmse")
-        shap_model_name_five = tree_candidates_five.iloc[0]["model"]
+def _(
+    SHAP_RANDOM_STATE_FIVE,
+    SHAP_SAMPLE_SIZE_FIVE,
+    TREE_MODEL_NAMES_FIVE,
+    X_five,
+    best_model_name_five,
+    best_model_pipeline_five,
+    model_summary_df_five,
+    y_five,
+):
+    from mathanx.ml.helpers import run_shap_analysis as _run_shap_analysis
 
-    shap_selection_df_five = pd.DataFrame(
-        {
-            "selected_for_shap": [shap_model_name_five],
-            "best_five_feature_model": [best_model_name_five],
-        }
+    shap_values_five, shap_model_name_five = _run_shap_analysis(
+        X_five, y_five, {}, best_model_name_five, {},
+        model_summary_df_five, TREE_MODEL_NAMES_FIVE,
+        pipeline=best_model_pipeline_five,
+        shap_sample_size=SHAP_SAMPLE_SIZE_FIVE,
+        shap_random_state=SHAP_RANDOM_STATE_FIVE,
+        check_linear=True,
     )
-    return shap_model_name_five, shap_selection_df_five
+    return shap_values_five, shap_model_name_five
 
 
 @app.cell
-def _(shap_selection_df_five):
-    shap_selection_df_five
+def _(shap_model_name_five, shap_values_five):
+    from mathanx.ml.helpers import plot_shap_beeswarm as _plot_shap_beeswarm
+
+    _plot_shap_beeswarm(shap_values_five, f"SHAP beeswarm for {shap_model_name_five} (selected predictors)")
     return
 
 
 @app.cell
-def _(SHAP_RANDOM_STATE_FIVE, SHAP_SAMPLE_SIZE_FIVE, X_five, pd):
-    sample_n_five = min(SHAP_SAMPLE_SIZE_FIVE, len(X_five))
-    X_shap_five = X_five.sample(n=sample_n_five, random_state=SHAP_RANDOM_STATE_FIVE).copy()
-    X_background_five = X_five.sample(n=min(200, len(X_five)), random_state=SHAP_RANDOM_STATE_FIVE + 1).copy()
-    shap_sample_summary_five = pd.DataFrame(
-        {
-            "sample_size": [sample_n_five],
-            "background_size": [len(X_background_five)],
-            "feature_count": [X_five.shape[1]],
-        }
-    )
-    return X_background_five, X_shap_five, shap_sample_summary_five
+def _(shap_model_name_five, shap_values_five):
+    from mathanx.ml.helpers import plot_shap_bar as _plot_shap_bar
 
-
-@app.cell
-def _(shap_sample_summary_five):
-    shap_sample_summary_five
+    _plot_shap_bar(shap_values_five, f"Global SHAP importance for {shap_model_name_five} (selected predictors)")
     return
 
 
-@app.cell
-def _(best_model_name_five, best_model_pipeline_five):
-    shap_preprocessor_five = None
-    shap_tree_estimator_five = None
-    shap_linear_estimator_five = None
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## 14. Experiment comparison
 
-    if best_model_name_five in ["ridge", "elastic_net"]:
-        shap_preprocessor_five = best_model_pipeline_five.named_steps["scale"]
-        shap_linear_estimator_five = best_model_pipeline_five.named_steps["model"]
-    else:
-        shap_tree_estimator_five = best_model_pipeline_five.named_steps["model"]
-    return (
-        shap_linear_estimator_five,
-        shap_preprocessor_five,
-        shap_tree_estimator_five,
-    )
+    Compare best models, parameters, and top permutation importances across all three feature sets.
+    """)
+    return
 
 
 @app.cell
 def _(
-    X_background_five,
-    X_shap_five,
+    best_model_name,
     best_model_name_five,
+    best_model_name_no_model,
+    model_summary_df,
+    model_summary_df_five,
+    model_summary_df_no_model,
+    permutation_importance_df_five,
+    permutation_importance_df_no_model,
     pd,
-    shap,
-    shap_linear_estimator_five,
-    shap_preprocessor_five,
-    shap_tree_estimator_five,
+    top_permutation_importance_df,
 ):
-    if best_model_name_five in ["ridge", "elastic_net"]:
-        X_background_five_transformed = pd.DataFrame(
-            shap_preprocessor_five.transform(X_background_five),
-            columns=X_background_five.columns,
-            index=X_background_five.index,
+    sections = []
+
+    for label, best, summ, top_perm in [
+        ("All features", best_model_name, model_summary_df, top_permutation_importance_df),
+        ("Without Model", best_model_name_no_model, model_summary_df_no_model, permutation_importance_df_no_model),
+        ("Five predictors", best_model_name_five, model_summary_df_five, permutation_importance_df_five),
+    ]:
+        row = summ[summ["model"] == best]
+        top3 = top_perm.head(3)["feature"].tolist() if top_perm is not None and len(top_perm) > 0 else []
+        sections.append(
+            {
+                "Feature set": label,
+                "Best model": best,
+                "Nested CV R²": f'{row.iloc[0]["mean_r2"]:.4f}' if len(row) > 0 else "",
+                "Nested CV RMSE": f'{row.iloc[0]["mean_rmse"]:.4f}' if len(row) > 0 else "",
+                "Top 3 features": ", ".join(top3),
+            }
         )
-        X_shap_five_transformed = pd.DataFrame(
-            shap_preprocessor_five.transform(X_shap_five),
-            columns=X_shap_five.columns,
-            index=X_shap_five.index,
-        )
-        shap_explainer_five = shap.LinearExplainer(shap_linear_estimator_five, X_background_five_transformed)
-        shap_values_five = shap_explainer_five(X_shap_five_transformed)
-    else:
-        shap_explainer_five = shap.TreeExplainer(shap_tree_estimator_five, data=X_background_five, feature_names=X_background_five.columns)
-        shap_values_five = shap_explainer_five(X_shap_five)
-    return (shap_values_five,)
 
-
-@app.cell
-def _(plt, shap, shap_model_name_five, shap_values_five):
-    plt.figure(figsize=(12, 8))
-    shap.plots.beeswarm(shap_values_five, max_display=20, show=False)
-    plt.title(f"SHAP beeswarm for {shap_model_name_five} (selected predictors)")
-    plt.tight_layout()
-    plt.gcf()
-    return
-
-
-@app.cell
-def _(plt, shap, shap_model_name_five, shap_values_five):
-    plt.figure(figsize=(12, 8))
-    shap.plots.bar(shap_values_five, max_display=20, show=False)
-    plt.title(f"Global SHAP importance for {shap_model_name_five} (selected predictors)")
-    plt.tight_layout()
-    plt.gcf()
+    experiment_comparison_df = pd.DataFrame(sections)
+    experiment_comparison_df
     return
 
 
