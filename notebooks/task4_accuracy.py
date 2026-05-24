@@ -293,9 +293,10 @@ def _(Any, Dict, List, Path, os):
 
 
 @app.cell
-def _(JSONExtractor, build_df_call4):
+def _(JSONExtractor, Path, build_df_call4):
     # Load the data
-    ext = JSONExtractor('../../01-original_data/') 
+    path_to_data = Path("data/raw").resolve().absolute()
+    ext = JSONExtractor(path_to_data) 
     ext._load_data()
 
     # Save the extracted data inside a variable
@@ -362,7 +363,50 @@ def _(List, pd):
 @app.cell
 def _(df_confidence, group_compute_stats):
     grouped_df_model = group_compute_stats(df_confidence, ["model", "question_id"])
+    grouped_df_model.head()
     return (grouped_df_model,)
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ### Extract data for ML
+
+    This section has the goal of producing a dataset that can be used for ML tasks.
+    """)
+    return
+
+
+@app.cell
+def _(df_confidence, group_compute_stats):
+    df_ml = group_compute_stats(df_confidence, ["run_id"])
+    df_ml.head()
+    return (df_ml,)
+
+
+@app.cell
+def _(df_ml):
+    # All personas replied to exactly 18 questions
+    df_ml["n_observations"].nunique()
+    return
+
+
+@app.cell
+def _(Path, df_ml):
+    if False:
+        path_to_save = Path("data/processed/validations/task-4_accuracy/task4_ml.csv")
+        df_ml.to_csv(path_to_save, index=False)
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    # Plots
+
+    This section details how the plots were produced.
+    """)
+    return
 
 
 @app.cell

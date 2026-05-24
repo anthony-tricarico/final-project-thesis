@@ -79,7 +79,7 @@ def _(FOLDER_NAME_MAPPING, Path, pd):
     df = pd.read_csv(path_call2_dataset)
     df["Model"] = df["Model"].replace(FOLDER_NAME_MAPPING)
     df.head()
-    return (df,)
+    return df, path_call2_dataset
 
 
 @app.cell
@@ -161,6 +161,63 @@ def _(mseaq_anxiety_dataset, mseaq_efficacy_dataset):
         sum_of_scores=("rating", "sum")
     ).reset_index()
     return df_viz_anxiety, df_viz_self_efficacy
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ### Preparing dataset with anxiety and self-efficacy scores for export
+
+    This step is used to derive anxiety and self-efficacy scores by taking advantage of the fact that most of the pre-processing needed to achieve this goal is already carried out in this notebook.
+    """)
+    return
+
+
+@app.cell
+def _(df_viz, df_viz_anxiety, df_viz_self_efficacy, pd):
+    # Change the name of the scales to recognize the appropriate subscales
+    df_viz_anxiety["scale"] = "mseaq_anx"
+    df_viz_self_efficacy["scale"] = "mseaq_se"
+
+    # Remove duplicate mseaq data from df_viz
+    final_df = df_viz[df_viz["scale"] != "mseaq"]
+
+    # Concatenate the two datasets to the final dataset to add MSEAQ observations
+    export_df = pd.concat([final_df, df_viz_anxiety, df_viz_self_efficacy], axis = 0, ignore_index=True)
+    export_df.head()
+    return (export_df,)
+
+
+@app.cell
+def _(df, export_df):
+    # Pivot the DataFrame
+    # We set run_id, Model, and mode as the index so they remain as standard columns
+    df_wide = export_df.pivot(
+        index=['run_id', 'Model', 'mode'], 
+        columns='scale', 
+        values='sum_of_scores'
+    ).reset_index()
+
+    # Clean up the column index name (pandas adds the name of the columns argument, 'scale')
+    df_wide.columns.name = None
+
+    # Rename the newly created columns to append '_score'
+    # dynamically map the unique values from the original 'scale' column
+    scale_values = df['scale'].unique()
+    rename_mapping = {col: f"{col}_score" for col in scale_values}
+
+    df_wide = df_wide.rename(columns=rename_mapping)
+    df_wide.head()
+    return (df_wide,)
+
+
+@app.cell
+def _(df_wide, path_call2_dataset):
+    # Save the dataset as csv
+    if False:
+        save_path = path_call2_dataset.parent / "task2_ml_dataset.csv"
+        df_wide.to_csv(save_path, index = False)
+    return
 
 
 @app.cell(hide_code=True)
