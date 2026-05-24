@@ -20,6 +20,8 @@ from xgboost import XGBRegressor
 
 import shap
 from collections import Counter
+from pathlib import Path
+import pickle
 
 
 class FrequencyEncoder(BaseEstimator, TransformerMixin):
@@ -348,8 +350,9 @@ def make_model_specs(
     random_state: int = 42,
     n_iter_search: int = 10,
     n_iter_xgb: int = 12,
+    extra_specs: Optional[dict] = None,
 ) -> dict:
-    return {
+    specs = {
         "ridge": {
             "estimator": build_linear(Ridge()),
             "search_cls": GridSearchCV,
@@ -420,6 +423,9 @@ def make_model_specs(
             },
         },
     }
+    if extra_specs:
+        specs.update(extra_specs)
+    return specs
 
 
 @dataclass
@@ -479,6 +485,77 @@ def run_experiment(
         best_model_name=best_model_name,
         best_model_params=best_model_params,
         best_model_pipeline=best_model_pipeline,
+        tuned_cv_results=tuned_cv_results,
+        final_estimator=final_estimator,
+        permutation_importance=permutation_importance,
+    )
+
+
+def save_experiment(
+    cache_dir: str | Path,
+    result: ExperimentResult,
+) -> None:
+    """Save an ExperimentResult to disk for later reuse."""
+    cache_dir = Path(cache_dir) if isinstance(cache_dir, str) else cache_dir
+    cache_dir.mkdir(parents=True, exist_ok=True)
+
+    result.model_summary.to_csv(cache_dir / "model_summary.csv", index=False)
+    result.nested_cv_results.to_csv(cache_dir / "nested_cv_results.csv", index=False)
+
+    if result.tuned_cv_results is not None:
+        result.tuned_cv_results.to_csv(cache_dir / "tuned_cv_results.csv", index=False)
+    if result.permutation_importance is not None:
+        result.permutation_importance.to_csv(cache_dir / "permutation_importance.csv", index=False)
+
+    pd.DataFrame(result.best_params_summary_rows).to_csv(cache_dir / "best_params_summary.csv", index=False)
+
+    with open(cache_dir / "best_params_by_model.pkl", "wb") as f:
+        pickle.dump(result.best_params_by_model, f)
+
+    with open(cache_dir / "best_model_name.txt", "w") as f:
+        f.write(result.best_model_name)
+
+    if result.final_estimator is not None:
+        import joblib
+        joblib.dump(result.final_estimator, cache_dir / "pipeline.joblib")
+
+
+def load_experiment(
+    cache_dir: str | Path,
+) -> ExperimentResult:
+    """Load a previously saved ExperimentResult from disk."""
+    import joblib
+
+    cache_dir = Path(cache_dir) if isinstance(cache_dir, str) else cache_dir
+
+    model_summary = pd.read_csv(cache_dir / "model_summary.csv")
+    nested_cv_results = pd.read_csv(cache_dir / "nested_cv_results.csv")
+
+    tuned_cv_path = cache_dir / "tuned_cv_results.csv"
+    tuned_cv_results = pd.read_csv(tuned_cv_path) if tuned_cv_path.exists() else None
+
+    perm_imp_path = cache_dir / "permutation_importance.csv"
+    permutation_importance = pd.read_csv(perm_imp_path) if perm_imp_path.exists() else None
+
+    best_params_summary = pd.read_csv(cache_dir / "best_params_summary.csv").to_dict("records")
+
+    with open(cache_dir / "best_params_by_model.pkl", "rb") as f:
+        best_params_by_model = pickle.load(f)
+
+    with open(cache_dir / "best_model_name.txt") as f:
+        best_model_name = f.read().strip()
+
+    pipeline_path = cache_dir / "pipeline.joblib"
+    final_estimator = joblib.load(pipeline_path) if pipeline_path.exists() else None
+
+    return ExperimentResult(
+        nested_cv_results=nested_cv_results,
+        model_summary=model_summary,
+        best_params_summary_rows=best_params_summary,
+        best_params_by_model=best_params_by_model,
+        best_model_name=best_model_name,
+        best_model_params=best_params_by_model.get(best_model_name, {}),
+        best_model_pipeline=final_estimator,
         tuned_cv_results=tuned_cv_results,
         final_estimator=final_estimator,
         permutation_importance=permutation_importance,
