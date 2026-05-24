@@ -484,10 +484,13 @@ def _(
     tree_nominal_features,
     y,
 ):
+    from pathlib import Path as _Path
+
     from mathanx.ml.config import RANDOM_STATE
     from mathanx.ml.helpers import (
         build_linear_pipeline as _build_linear_pipeline,
         build_tree_pipeline as _build_tree_pipeline,
+        load_experiment as _load_experiment,
         make_model_specs as _make_model_specs,
         run_experiment as _run_experiment,
     )
@@ -496,7 +499,11 @@ def _(
     _build_tree = lambda m: _build_tree_pipeline(m, numeric_features, tree_nominal_features)
     model_specs = _make_model_specs(_build_linear, _build_tree, random_state=RANDOM_STATE)
 
-    _result = _run_experiment(X, y, model_specs, random_state=RANDOM_STATE)
+    _cache_dir = _Path("models/all_features")
+    if _cache_dir.exists():
+        _result = _load_experiment(_cache_dir)
+    else:
+        _result = _run_experiment(X, y, model_specs, random_state=RANDOM_STATE)
 
     model_summary_df = _result.model_summary
     best_params_by_model = _result.best_params_by_model
@@ -695,10 +702,19 @@ def _(
     model_specs_no_model,
     y,
 ):
-    from mathanx.ml.config import RANDOM_STATE as RANDOM_STATE_NO_MODEL
-    from mathanx.ml.helpers import run_experiment as _run_experiment_no_model
+    from pathlib import Path as _Path
 
-    _result_no_model = _run_experiment_no_model(X, y, model_specs_no_model, random_state=RANDOM_STATE_NO_MODEL)
+    from mathanx.ml.config import RANDOM_STATE as RANDOM_STATE_NO_MODEL
+    from mathanx.ml.helpers import (
+        load_experiment as _load_experiment_no_model,
+        run_experiment as _run_experiment_no_model,
+    )
+
+    _cache_dir = _Path("models/no_model")
+    if _cache_dir.exists():
+        _result_no_model = _load_experiment_no_model(_cache_dir)
+    else:
+        _result_no_model = _run_experiment_no_model(X, y, model_specs_no_model, random_state=RANDOM_STATE_NO_MODEL)
 
     model_summary_df_no_model = _result_no_model.model_summary
     best_params_by_model_no_model = _result_no_model.best_params_by_model
@@ -805,8 +821,14 @@ def _(
     ml_df,
     pd,
 ):
+    from pathlib import Path as _Path
+
     from mathanx.ml.config import RANDOM_STATE as RANDOM_STATE_FIVE
-    from mathanx.ml.helpers import make_model_specs as _make_model_specs_five, run_experiment as _run_experiment_five
+    from mathanx.ml.helpers import (
+        load_experiment as _load_experiment_five,
+        make_model_specs as _make_model_specs_five,
+        run_experiment as _run_experiment_five,
+    )
 
     five_feature_columns = ["mseaq_anx", "amas_score", "maes_score", "mseaq_se", "confidence_scaled"]
     X_five = ml_df.loc[:, five_feature_columns].copy()
@@ -816,7 +838,11 @@ def _(
     build_tree_five = lambda m: Pipeline([("model", m)])
     model_specs_five = _make_model_specs_five(build_linear_five, build_tree_five, random_state=RANDOM_STATE_FIVE)
 
-    _result_five = _run_experiment_five(X_five, y_five, model_specs_five, random_state=RANDOM_STATE_FIVE)
+    _cache_dir = _Path("models/five_predictors")
+    if _cache_dir.exists():
+        _result_five = _load_experiment_five(_cache_dir)
+    else:
+        _result_five = _run_experiment_five(X_five, y_five, model_specs_five, random_state=RANDOM_STATE_FIVE)
 
     model_summary_df_five = _result_five.model_summary
     best_params_by_model_five = _result_five.best_params_by_model
