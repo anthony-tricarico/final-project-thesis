@@ -94,6 +94,45 @@ def _(Path, pd):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
+    ## Fallacies Dataset
+    """)
+    return
+
+
+@app.cell
+def _(Path, pd):
+    path_fallacies_df = Path("data/processed/supplementary_fallacies.csv").resolve().absolute()
+    fallacies_df = pd.read_csv(path_fallacies_df)
+    fallacies_df.head(20)
+    return (fallacies_df,)
+
+
+@app.cell
+def _(fallacies_df):
+    import numpy as np
+
+    cols_to_drop = [x for x in fallacies_df.columns if "no_fallacies" in x]
+    fallacies_df_dropped = fallacies_df.drop(cols_to_drop, axis=1)
+    q4_cols = [x for x in fallacies_df_dropped.columns if "Q4" in x]
+    q5_cols = [x for x in fallacies_df_dropped.columns if "Q5" in x]
+    q6_cols = [x for x in fallacies_df_dropped.columns if "Q6" in x]
+
+    q4_mean = np.mean(fallacies_df_dropped[q4_cols], axis = 1)
+    q5_mean = np.mean(fallacies_df_dropped[q5_cols], axis = 1)
+    q6_mean = np.mean(fallacies_df_dropped[q6_cols], axis = 1)
+
+    df_fallacies_final = fallacies_df_dropped.drop([*q4_cols, *q5_cols, *q6_cols], axis = 1).assign(
+            q4_fallacy_score = q4_mean,
+            q5_fallacy_score = q5_mean,
+            q6_fallacy_score = q6_mean,
+    )
+    df_fallacies_final.head()
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
     ## ML dataset merge
 
     In this section we merge the three dataframes to produce a single tabular representation of the data to train ML models later on.
@@ -105,7 +144,8 @@ def _(mo):
 def _(demographics_reduced_df, human_task2_df, task4_df):
     final_ml_dataset = demographics_reduced_df\
         .merge(human_task2_df, how="inner", on="run_id")\
-        .merge(task4_df, how="inner", on="run_id")
+        .merge(task4_df, how="inner", on="run_id")\
+        # .merge(df_fallacies_final, how="inner", on="run_id")
     final_ml_dataset.head()
     return (final_ml_dataset,)
 
@@ -114,7 +154,6 @@ def _(demographics_reduced_df, human_task2_df, task4_df):
 def _(final_ml_dataset):
     # Check how many human personas we have in the final dataset
     len(final_ml_dataset)
-    # As expected this is approximately 75% of the total personas generated
     return
 
 

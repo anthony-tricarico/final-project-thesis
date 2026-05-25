@@ -14,6 +14,7 @@ LEAKAGE_COLS: set[str] = {
     "run_id",
     "accuracy",
     "confidence",
+    "confidence_scaled",
     "delta_confidence",
     "total_correct",
     "n_observations",
@@ -39,5 +40,4 @@ FIVE_FEATURE_COLUMNS: list[str] = [
     "amas_score",
     "maes_score",
     "mseaq_se",
-    "confidence_scaled",
 ]
