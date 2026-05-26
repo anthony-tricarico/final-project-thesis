@@ -41,3 +41,17 @@ FIVE_FEATURE_COLUMNS: list[str] = [
     "maes_score",
     "mseaq_se",
 ]
+
+PCA_TRANSFORM_PATH: Path = DATASET_PATH.parent / "pca_transform.joblib"
+
+PSYCH_SCORE_COLUMNS: list[str] = [
+    "amas_score",
+    "maes_score",
+    "mseaq_anx",
+    "mseaq_se",
+]
+
+PCA_COMPONENT_COLUMNS: list[str] = [
+    "PC1",
+    "PC2",
+]
