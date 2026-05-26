@@ -4,6 +4,8 @@ from .helpers import (
     make_model_specs,
     run_experiment,
     ExperimentResult,
+    save_experiment,
+    load_experiment,
 )
 
 __all__ = [
@@ -12,4 +14,6 @@ __all__ = [
     "make_model_specs",
     "run_experiment",
     "ExperimentResult",
+    "save_experiment",
+    "load_experiment",
 ]

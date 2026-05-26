@@ -29,9 +29,7 @@ def _():
     return (
         DATASET_PATH,
         FIG_PATH,
-        KFold,
         LEAKAGE_COLS,
-        Literal,
         Path,
         Pipeline,
         SHAP_SAMPLE_SIZE,
@@ -44,6 +42,7 @@ def _():
         np,
         pd,
         plt,
+        shap,
         sns,
     )
 
@@ -476,18 +475,14 @@ def _(nominal_features, numeric_features, tree_nominal_features):
 
 
 @app.cell
-def _(
-    X,
-    nominal_features,
-    numeric_features,
-    pd,
-    tree_nominal_features,
-    y,
-):
+def _(X, nominal_features, numeric_features, pd, tree_nominal_features, y):
+    from pathlib import Path as _Path
+
     from mathanx.ml.config import RANDOM_STATE
     from mathanx.ml.helpers import (
         build_linear_pipeline as _build_linear_pipeline,
         build_tree_pipeline as _build_tree_pipeline,
+        load_experiment as _load_experiment,
         make_model_specs as _make_model_specs,
         run_experiment as _run_experiment,
     )
@@ -496,7 +491,11 @@ def _(
     _build_tree = lambda m: _build_tree_pipeline(m, numeric_features, tree_nominal_features)
     model_specs = _make_model_specs(_build_linear, _build_tree, random_state=RANDOM_STATE)
 
-    _result = _run_experiment(X, y, model_specs, random_state=RANDOM_STATE)
+    _cache_dir = _Path("models/all_features")
+    if _cache_dir.exists():
+        _result = _load_experiment(_cache_dir)
+    else:
+        _result = _run_experiment(X, y, model_specs, random_state=RANDOM_STATE)
 
     model_summary_df = _result.model_summary
     best_params_by_model = _result.best_params_by_model
@@ -506,16 +505,13 @@ def _(
     permutation_importance_df = _result.permutation_importance
     top_permutation_importance_df = permutation_importance_df.head(20)
     best_params_summary_df = pd.DataFrame(_result.best_params_summary_rows).sort_values("model")
-
     return (
         RANDOM_STATE,
         best_model_name,
         best_params_by_model,
         best_params_summary_df,
-        best_model_pipeline,
         model_specs,
         model_summary_df,
-        permutation_importance_df,
         top_permutation_importance_df,
         tuned_cv_results_df,
     )
@@ -620,14 +616,17 @@ def _(mo):
 
 
 @app.cell
-def _(SHAP_SAMPLE_SIZE, TREE_MODEL_NAMES):
+def _():
     SHAP_RANDOM_STATE = 42
-    return SHAP_RANDOM_STATE, SHAP_SAMPLE_SIZE, TREE_MODEL_NAMES
+    return (SHAP_RANDOM_STATE,)
 
 
 @app.cell
 def _(
+    SHAP_RANDOM_STATE,
+    SHAP_SAMPLE_SIZE,
     TREE_MODEL_NAMES,
+    X,
     best_model_name,
     best_params_by_model,
     model_specs,
@@ -641,7 +640,41 @@ def _(
         tuned_cv_results_df, TREE_MODEL_NAMES,
         shap_sample_size=SHAP_SAMPLE_SIZE, shap_random_state=SHAP_RANDOM_STATE,
     )
-    return shap_values, shap_model_name
+    return shap_model_name, shap_values
+
+
+@app.cell
+def _(shap_values):
+    shap_values.feature_names
+    return
+
+
+@app.cell
+def _(FIG_PATH, shap, shap_model_name, shap_values):
+    from mathanx.ml.helpers import plot_shap_beeswarm as _plot_shap_beeswarm
+
+    indices = [i for i, name in enumerate(shap_values.feature_names) if name != "Model"]
+    shap_values_filtered = shap.Explanation(
+        values=shap_values.values[:, indices],
+        base_values=shap_values.base_values,
+        data=shap_values.data[:, indices] if shap_values.data is not None else None,
+        feature_names=[shap_values.feature_names[i] for i in indices],
+    )
+
+    _fig = _plot_shap_beeswarm(shap_values_filtered, f"SHAP beeswarm for {shap_model_name} (All predictors, model not plotted)")
+
+    _fig.savefig(FIG_PATH / "beeswarm_all_predictors_model_excluded.pdf", format="pdf")
+    _fig.savefig(FIG_PATH / "beeswarm_all_predictors_model_excluded.png", format="png")
+    _fig
+    return (shap_values_filtered,)
+
+
+@app.cell
+def _(shap_model_name, shap_values_filtered):
+    from mathanx.ml.helpers import plot_shap_bar as _plot_shap_bar
+
+    _plot_shap_bar(shap_values_filtered, f"Global SHAP importance for {shap_model_name} (without Model)")
+    return
 
 
 @app.cell
@@ -690,21 +723,25 @@ def _(RANDOM_STATE, nominal_features, numeric_features, tree_nominal_features):
 
 
 @app.cell
-def _(
-    X,
-    model_specs_no_model,
-    y,
-):
-    from mathanx.ml.config import RANDOM_STATE as RANDOM_STATE_NO_MODEL
-    from mathanx.ml.helpers import run_experiment as _run_experiment_no_model
+def _(X, model_specs_no_model, y):
+    from pathlib import Path as _Path
 
-    _result_no_model = _run_experiment_no_model(X, y, model_specs_no_model, random_state=RANDOM_STATE_NO_MODEL)
+    from mathanx.ml.config import RANDOM_STATE as RANDOM_STATE_NO_MODEL
+    from mathanx.ml.helpers import (
+        load_experiment as _load_experiment_no_model,
+        run_experiment as _run_experiment_no_model,
+    )
+
+    _cache_dir = _Path("models/no_model")
+    if _cache_dir.exists():
+        _result_no_model = _load_experiment_no_model(_cache_dir)
+    else:
+        _result_no_model = _run_experiment_no_model(X, y, model_specs_no_model, random_state=RANDOM_STATE_NO_MODEL)
 
     model_summary_df_no_model = _result_no_model.model_summary
     best_params_by_model_no_model = _result_no_model.best_params_by_model
     best_model_name_no_model = _result_no_model.best_model_name
     permutation_importance_df_no_model = _result_no_model.permutation_importance
-
     return (
         best_model_name_no_model,
         best_params_by_model_no_model,
@@ -767,7 +804,7 @@ def _(
         shap_sample_size=SHAP_SAMPLE_SIZE_NO_MODEL,
         shap_random_state=SHAP_RANDOM_STATE_NO_MODEL,
     )
-    return shap_values_no_model, shap_model_name_no_model
+    return shap_model_name_no_model, shap_values_no_model
 
 
 @app.cell
@@ -776,6 +813,8 @@ def _(FIG_PATH, shap_model_name_no_model, shap_values_no_model):
 
     _fig = _plot_shap_beeswarm(shap_values_no_model, f"SHAP beeswarm for {shap_model_name_no_model} (without Model)")
     _fig.savefig(FIG_PATH / "beeswarm_no_model.pdf", format="pdf")
+    _fig.savefig(FIG_PATH / "beeswarm_no_model.png", format="png")
+    _fig
     return
 
 
@@ -798,25 +837,28 @@ def _(mo):
 
 
 @app.cell
-def _(
-    Pipeline,
-    StandardScaler,
-    TARGET,
-    ml_df,
-    pd,
-):
-    from mathanx.ml.config import RANDOM_STATE as RANDOM_STATE_FIVE
-    from mathanx.ml.helpers import make_model_specs as _make_model_specs_five, run_experiment as _run_experiment_five
+def _(Pipeline, StandardScaler, TARGET, ml_df, pd):
+    from pathlib import Path as _Path
 
-    five_feature_columns = ["mseaq_anx", "amas_score", "maes_score", "mseaq_se", "confidence_scaled"]
-    X_five = ml_df.loc[:, five_feature_columns].copy()
+    from mathanx.ml.config import FIVE_FEATURE_COLUMNS, RANDOM_STATE as RANDOM_STATE_FIVE
+    from mathanx.ml.helpers import (
+        load_experiment as _load_experiment_five,
+        make_model_specs as _make_model_specs_five,
+        run_experiment as _run_experiment_five,
+    )
+
+    X_five = ml_df.loc[:, FIVE_FEATURE_COLUMNS].copy()
     y_five = ml_df[TARGET].copy()
 
     build_linear_five = lambda m: Pipeline([("scale", StandardScaler()), ("model", m)])
     build_tree_five = lambda m: Pipeline([("model", m)])
     model_specs_five = _make_model_specs_five(build_linear_five, build_tree_five, random_state=RANDOM_STATE_FIVE)
 
-    _result_five = _run_experiment_five(X_five, y_five, model_specs_five, random_state=RANDOM_STATE_FIVE)
+    _cache_dir = _Path("models/five_predictors")
+    if _cache_dir.exists():
+        _result_five = _load_experiment_five(_cache_dir)
+    else:
+        _result_five = _run_experiment_five(X_five, y_five, model_specs_five, random_state=RANDOM_STATE_FIVE)
 
     model_summary_df_five = _result_five.model_summary
     best_params_by_model_five = _result_five.best_params_by_model
@@ -886,7 +928,7 @@ def _(
         shap_random_state=SHAP_RANDOM_STATE_FIVE,
         check_linear=True,
     )
-    return shap_values_five, shap_model_name_five
+    return shap_model_name_five, shap_values_five
 
 
 @app.cell
@@ -908,9 +950,159 @@ def _(shap_model_name_five, shap_values_five):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ## 14. Experiment comparison
+    ## 14. Nested CV with PCA psychometric components
+    """)
+    return
 
-    Compare best models, parameters, and top permutation importances across all three feature sets.
+
+@app.cell
+def _(LEAKAGE_COLS, RANDOM_STATE, TARGET, ml_df):
+    import joblib as _joblib
+
+    from mathanx.ml.config import PCA_TRANSFORM_PATH, PSYCH_SCORE_COLUMNS, PCA_COMPONENT_COLUMNS
+    from mathanx.ml.helpers import (
+        build_linear_pipeline as _build_linear_pipeline,
+        build_tree_pipeline as _build_tree_pipeline,
+        classify_columns as _classify_columns,
+        make_model_specs as _make_model_specs_pca,
+    )
+
+    # Build X with PCA components instead of raw psychometric scores
+    _feature_cols = [c for c in ml_df.columns if c not in LEAKAGE_COLS and c not in {TARGET}]
+    X_pca = ml_df.loc[:, _feature_cols].copy()
+
+    _pca_data = _joblib.load(PCA_TRANSFORM_PATH)
+    _pc_scores = _pca_data["pca"].transform(_pca_data["scaler"].transform(ml_df[PSYCH_SCORE_COLUMNS]))
+
+    X_pca = X_pca.drop(columns=PSYCH_SCORE_COLUMNS)
+    X_pca[PCA_COMPONENT_COLUMNS[0]] = _pc_scores[:, 0]
+    X_pca[PCA_COMPONENT_COLUMNS[1]] = _pc_scores[:, 1]
+    y_pca = ml_df[TARGET].copy()
+
+    # Recompute feature types — PC1 and PC2 are now regular numeric features
+    _col_types = _classify_columns(X_pca)
+    _nominal_features_pca = [c for c in _col_types["nominal_features"] if c != "Model"]
+    _tree_nominal_features_pca = [c for c in _col_types["tree_nominal_features"] if c != "Model"]
+    _numeric_features_pca = [c for c in _col_types["numeric_features"] if c != "Model"]
+
+    _build_linear_pca = lambda m: _build_linear_pipeline(m, _numeric_features_pca, _nominal_features_pca)
+    _build_tree_pca = lambda m: _build_tree_pipeline(m, _numeric_features_pca, _tree_nominal_features_pca)
+    model_specs_pca = _make_model_specs_pca(_build_linear_pca, _build_tree_pca, random_state=RANDOM_STATE)
+    return X_pca, model_specs_pca, y_pca
+
+
+@app.cell
+def _(X_pca, model_specs_pca, y_pca):
+    from pathlib import Path as _Path
+
+    from mathanx.ml.config import RANDOM_STATE as RANDOM_STATE_PCA
+    from mathanx.ml.helpers import (
+        load_experiment as _load_experiment_pca,
+        run_experiment as _run_experiment_pca,
+    )
+
+    _cache_dir = _Path("models/pca_predictors")
+    if _cache_dir.exists():
+        _result_pca = _load_experiment_pca(_cache_dir)
+    else:
+        _result_pca = _run_experiment_pca(X_pca, y_pca, model_specs_pca, random_state=RANDOM_STATE_PCA)
+
+    model_summary_df_pca = _result_pca.model_summary
+    best_model_name_pca = _result_pca.best_model_name
+    best_model_pipeline_pca = _result_pca.final_estimator
+    permutation_importance_df_pca = _result_pca.permutation_importance
+    return (
+        best_model_name_pca,
+        best_model_pipeline_pca,
+        model_summary_df_pca,
+        permutation_importance_df_pca,
+    )
+
+
+@app.cell
+def _(model_summary_df_pca):
+    model_summary_df_pca
+    return
+
+
+@app.cell
+def _(
+    best_model_name_pca,
+    model_summary_df_pca,
+    permutation_importance_df_pca,
+):
+    if permutation_importance_df_pca is not None and len(permutation_importance_df_pca) > 0:
+        _best_row = model_summary_df_pca[model_summary_df_pca["model"] == best_model_name_pca]
+        _top3 = permutation_importance_df_pca.head(3)["feature"].tolist()
+        print(f"Best model: {best_model_name_pca}")
+        print(f"Top 3 features: {', '.join(_top3)}")
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## 14b. SHAP explainability for PCA components
+
+    Explain the best PCA-based model with SHAP.
+    """)
+    return
+
+
+@app.cell
+def _(SHAP_SAMPLE_SIZE, TREE_MODEL_NAMES):
+    SHAP_SAMPLE_SIZE_PCA = SHAP_SAMPLE_SIZE
+    SHAP_RANDOM_STATE_PCA = 42
+    TREE_MODEL_NAMES_PCA = TREE_MODEL_NAMES
+    return SHAP_RANDOM_STATE_PCA, SHAP_SAMPLE_SIZE_PCA, TREE_MODEL_NAMES_PCA
+
+
+@app.cell
+def _(
+    SHAP_RANDOM_STATE_PCA,
+    SHAP_SAMPLE_SIZE_PCA,
+    TREE_MODEL_NAMES_PCA,
+    X_pca,
+    best_model_name_pca,
+    best_model_pipeline_pca,
+    model_summary_df_pca,
+    y_pca,
+):
+    from mathanx.ml.helpers import run_shap_analysis as _run_shap_analysis
+
+    shap_values_pca, shap_model_name_pca = _run_shap_analysis(
+        X_pca, y_pca, {}, best_model_name_pca, {},
+        model_summary_df_pca, TREE_MODEL_NAMES_PCA,
+        pipeline=best_model_pipeline_pca,
+        shap_sample_size=SHAP_SAMPLE_SIZE_PCA,
+        shap_random_state=SHAP_RANDOM_STATE_PCA,
+        check_linear=True,
+    )
+    return shap_model_name_pca, shap_values_pca
+
+
+@app.cell
+def _(shap_model_name_pca, shap_values_pca):
+    from mathanx.ml.helpers import plot_shap_beeswarm as _plot_shap_beeswarm
+
+    _plot_shap_beeswarm(shap_values_pca, f"SHAP beeswarm for {shap_model_name_pca} (PCA predictors)")
+    return
+
+
+@app.cell
+def _(shap_model_name_pca, shap_values_pca):
+    from mathanx.ml.helpers import plot_shap_bar as _plot_shap_bar
+
+    _plot_shap_bar(shap_values_pca, f"Global SHAP importance for {shap_model_name_pca} (PCA predictors)")
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## 15. Experiment comparison
+
+    Compare best models, parameters, and top permutation importances across all four feature sets.
     """)
     return
 
@@ -920,12 +1112,15 @@ def _(
     best_model_name,
     best_model_name_five,
     best_model_name_no_model,
+    best_model_name_pca,
     model_summary_df,
     model_summary_df_five,
     model_summary_df_no_model,
+    model_summary_df_pca,
+    pd,
     permutation_importance_df_five,
     permutation_importance_df_no_model,
-    pd,
+    permutation_importance_df_pca,
     top_permutation_importance_df,
 ):
     sections = []
@@ -934,21 +1129,141 @@ def _(
         ("All features", best_model_name, model_summary_df, top_permutation_importance_df),
         ("Without Model", best_model_name_no_model, model_summary_df_no_model, permutation_importance_df_no_model),
         ("Five predictors", best_model_name_five, model_summary_df_five, permutation_importance_df_five),
+        ("PCA components", best_model_name_pca, model_summary_df_pca, permutation_importance_df_pca),
     ]:
-        row = summ[summ["model"] == best]
+        _row = summ[summ["model"] == best]
         top3 = top_perm.head(3)["feature"].tolist() if top_perm is not None and len(top_perm) > 0 else []
         sections.append(
             {
                 "Feature set": label,
                 "Best model": best,
-                "Nested CV R²": f'{row.iloc[0]["mean_r2"]:.4f}' if len(row) > 0 else "",
-                "Nested CV RMSE": f'{row.iloc[0]["mean_rmse"]:.4f}' if len(row) > 0 else "",
+                "Nested CV R²": f'{_row.iloc[0]["mean_r2"]:.4f}' if len(_row) > 0 else "",
+                "Nested CV RMSE": f'{_row.iloc[0]["mean_rmse"]:.4f}' if len(_row) > 0 else "",
                 "Top 3 features": ", ".join(top3),
             }
         )
 
     experiment_comparison_df = pd.DataFrame(sections)
     experiment_comparison_df
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## 16. Model confound analysis
+
+    The `Model` feature (which LLM architecture is used) dominates the full model with ~300x the importance of any anxiety feature.
+    This section investigates whether the apparent positive anxiety-accuracy relationship is driven by between-model differences
+    (better LLMs generate more "anxious" persona responses) rather than a genuine within-person relationship.
+    """)
+    return
+
+
+@app.cell
+def _(ml_df, pd, plt):
+    from statsmodels.nonparametric.smoothers_lowess import lowess
+
+    anxiety_cols = ["amas_score", "maes_score", "mseaq_anx", "mseaq_se"]
+
+    _within_rows = []
+    for _model in ml_df["Model"].unique():
+        _sub = ml_df[ml_df["Model"] == _model]
+        _row_pm = {"Model": _model, "n": len(_sub)}
+        for _col in anxiety_cols:
+            _row_pm[f"{_col}_r"] = _sub[_col].corr(_sub["accuracy"])
+        _within_rows.append(_row_pm)
+    within_corr_df = pd.DataFrame(_within_rows).sort_values("Model")
+
+    _corr_cols = [c for c in within_corr_df.columns if c.endswith("_r")]
+    _fig, _axes = plt.subplots(4, 4, figsize=(16, 14))
+    _models_sorted = sorted(ml_df["Model"].unique())
+    for _idx, _model in enumerate(_models_sorted):
+        _ax = _axes[_idx // 4, _idx % 4]
+        _sub = ml_df[ml_df["Model"] == _model]
+        _ax.scatter(_sub["mseaq_anx"], _sub["accuracy"], alpha=0.15, s=3, c="#648fff")
+        _smooth = lowess(_sub["accuracy"], _sub["mseaq_anx"], frac=0.5, it=0, return_sorted=True)
+        _ax.plot(_smooth[:, 0], _smooth[:, 1], "r-", linewidth=1.5)
+        _ax.set_title(f"{_model}", fontsize=8)
+        _ax.set_xlabel("")
+        _ax.set_ylabel("")
+        _ax.tick_params(labelsize=6)
+    _fig.suptitle("Accuracy vs MSEAQ Anxiety — one panel per model", fontsize=14, y=1.02)
+    _fig.text(0.5, 0.01, "MSEAQ Anxiety", ha="center", fontsize=12)
+    _fig.text(0.01, 0.5, "Accuracy", va="center", rotation=90, fontsize=12)
+    plt.tight_layout()
+    plt.show()
+    return anxiety_cols, within_corr_df
+
+
+@app.cell
+def _(corr_cols, within_corr_df):
+    styled = within_corr_df.style.background_gradient(cmap="coolwarm", axis=None, subset=corr_cols).format({c: "{:.3f}" for c in corr_cols})
+    styled
+    return
+
+
+@app.cell
+def _(anxiety_cols, ml_df, pd):
+    from statsmodels.formula.api import mixedlm
+    import statsmodels.api as sm
+
+    formula = "accuracy ~ " + " + ".join(anxiety_cols)
+    mixed_model = mixedlm(formula, ml_df, groups=ml_df["Model"])
+    mixed_result = mixed_model.fit()
+
+    ols_model = sm.OLS.from_formula(formula, data=ml_df)
+    ols_result = ols_model.fit()
+
+    comparison_rows = []
+    for _col in anxiety_cols:
+        ols_coef = ols_result.params[_col]
+        ols_p = ols_result.pvalues[_col]
+        mixed_coef = mixed_result.fe_params[_col]
+        mixed_p = mixed_result.pvalues[_col]
+        comparison_rows.append({
+            "feature": _col,
+            "OLS_coef": f"{ols_coef:.5f}",
+            "OLS_p": f"{ols_p:.2e}",
+            "Mixed_coef": f"{mixed_coef:.5f}",
+            "Mixed_p": f"{mixed_p:.2e}",
+        })
+
+    comparison_rows.append({
+        "feature": "R² / Log-Likelihood",
+        "OLS_coef": f"{ols_result.rsquared:.4f}",
+        "OLS_p": "",
+        "Mixed_coef": f"{mixed_result.llf:.1f}",
+        "Mixed_p": "",
+    })
+
+    comparison_df = pd.DataFrame(comparison_rows)
+    comparison_df
+    return
+
+
+@app.cell
+def _(ml_df, plt):
+    anxiety_features = ["amas_score", "maes_score", "mseaq_anx", "mseaq_se"]
+    models = sorted(ml_df["Model"].unique())
+    model_means = ml_df.groupby("Model")[["accuracy"] + anxiety_features].mean()
+
+    _fig, _axes = plt.subplots(2, 2, figsize=(14, 10))
+    for _idx, feat in enumerate(anxiety_features):
+        # FIXED: Changed 'axes' to '_axes'
+        _ax = _axes[_idx // 2, _idx % 2] 
+
+        for _model in models:
+            pt = model_means.loc[_model]
+            _ax.scatter(pt[feat], pt["accuracy"], s=80, alpha=0.8)
+            _ax.annotate(_model, (pt[feat], pt["accuracy"]), fontsize=7, alpha=0.8)
+
+        _ax.set_xlabel(f"Mean {feat}")
+        _ax.set_ylabel("Mean accuracy")
+        _ax.set_title(f"Between-model: {feat}", fontsize=12)
+
+    plt.tight_layout()
+    plt.show()
     return
 
 

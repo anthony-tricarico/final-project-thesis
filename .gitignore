@@ -227,3 +227,6 @@ __marimo__/
 
 # Directory containing figure artifacts
 /figures
+
+# Directory containing trained model artifacts
+/models
