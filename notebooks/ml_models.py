@@ -950,9 +950,159 @@ def _(shap_model_name_five, shap_values_five):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ## 14. Experiment comparison
+    ## 14. Nested CV with PCA psychometric components
+    """)
+    return
 
-    Compare best models, parameters, and top permutation importances across all three feature sets.
+
+@app.cell
+def _(LEAKAGE_COLS, RANDOM_STATE, TARGET, ml_df):
+    import joblib as _joblib
+
+    from mathanx.ml.config import PCA_TRANSFORM_PATH, PSYCH_SCORE_COLUMNS, PCA_COMPONENT_COLUMNS
+    from mathanx.ml.helpers import (
+        build_linear_pipeline as _build_linear_pipeline,
+        build_tree_pipeline as _build_tree_pipeline,
+        classify_columns as _classify_columns,
+        make_model_specs as _make_model_specs_pca,
+    )
+
+    # Build X with PCA components instead of raw psychometric scores
+    _feature_cols = [c for c in ml_df.columns if c not in LEAKAGE_COLS and c not in {TARGET}]
+    X_pca = ml_df.loc[:, _feature_cols].copy()
+
+    _pca_data = _joblib.load(PCA_TRANSFORM_PATH)
+    _pc_scores = _pca_data["pca"].transform(_pca_data["scaler"].transform(ml_df[PSYCH_SCORE_COLUMNS]))
+
+    X_pca = X_pca.drop(columns=PSYCH_SCORE_COLUMNS)
+    X_pca[PCA_COMPONENT_COLUMNS[0]] = _pc_scores[:, 0]
+    X_pca[PCA_COMPONENT_COLUMNS[1]] = _pc_scores[:, 1]
+    y_pca = ml_df[TARGET].copy()
+
+    # Recompute feature types — PC1 and PC2 are now regular numeric features
+    _col_types = _classify_columns(X_pca)
+    _nominal_features_pca = [c for c in _col_types["nominal_features"] if c != "Model"]
+    _tree_nominal_features_pca = [c for c in _col_types["tree_nominal_features"] if c != "Model"]
+    _numeric_features_pca = [c for c in _col_types["numeric_features"] if c != "Model"]
+
+    _build_linear_pca = lambda m: _build_linear_pipeline(m, _numeric_features_pca, _nominal_features_pca)
+    _build_tree_pca = lambda m: _build_tree_pipeline(m, _numeric_features_pca, _tree_nominal_features_pca)
+    model_specs_pca = _make_model_specs_pca(_build_linear_pca, _build_tree_pca, random_state=RANDOM_STATE)
+    return X_pca, model_specs_pca, y_pca
+
+
+@app.cell
+def _(X_pca, model_specs_pca, y_pca):
+    from pathlib import Path as _Path
+
+    from mathanx.ml.config import RANDOM_STATE as RANDOM_STATE_PCA
+    from mathanx.ml.helpers import (
+        load_experiment as _load_experiment_pca,
+        run_experiment as _run_experiment_pca,
+    )
+
+    _cache_dir = _Path("models/pca_predictors")
+    if _cache_dir.exists():
+        _result_pca = _load_experiment_pca(_cache_dir)
+    else:
+        _result_pca = _run_experiment_pca(X_pca, y_pca, model_specs_pca, random_state=RANDOM_STATE_PCA)
+
+    model_summary_df_pca = _result_pca.model_summary
+    best_model_name_pca = _result_pca.best_model_name
+    best_model_pipeline_pca = _result_pca.final_estimator
+    permutation_importance_df_pca = _result_pca.permutation_importance
+    return (
+        best_model_name_pca,
+        best_model_pipeline_pca,
+        model_summary_df_pca,
+        permutation_importance_df_pca,
+    )
+
+
+@app.cell
+def _(model_summary_df_pca):
+    model_summary_df_pca
+    return
+
+
+@app.cell
+def _(
+    best_model_name_pca,
+    model_summary_df_pca,
+    permutation_importance_df_pca,
+):
+    if permutation_importance_df_pca is not None and len(permutation_importance_df_pca) > 0:
+        _best_row = model_summary_df_pca[model_summary_df_pca["model"] == best_model_name_pca]
+        _top3 = permutation_importance_df_pca.head(3)["feature"].tolist()
+        print(f"Best model: {best_model_name_pca}")
+        print(f"Top 3 features: {', '.join(_top3)}")
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## 14b. SHAP explainability for PCA components
+
+    Explain the best PCA-based model with SHAP.
+    """)
+    return
+
+
+@app.cell
+def _(SHAP_SAMPLE_SIZE, TREE_MODEL_NAMES):
+    SHAP_SAMPLE_SIZE_PCA = SHAP_SAMPLE_SIZE
+    SHAP_RANDOM_STATE_PCA = 42
+    TREE_MODEL_NAMES_PCA = TREE_MODEL_NAMES
+    return SHAP_RANDOM_STATE_PCA, SHAP_SAMPLE_SIZE_PCA, TREE_MODEL_NAMES_PCA
+
+
+@app.cell
+def _(
+    SHAP_RANDOM_STATE_PCA,
+    SHAP_SAMPLE_SIZE_PCA,
+    TREE_MODEL_NAMES_PCA,
+    X_pca,
+    best_model_name_pca,
+    best_model_pipeline_pca,
+    model_summary_df_pca,
+    y_pca,
+):
+    from mathanx.ml.helpers import run_shap_analysis as _run_shap_analysis
+
+    shap_values_pca, shap_model_name_pca = _run_shap_analysis(
+        X_pca, y_pca, {}, best_model_name_pca, {},
+        model_summary_df_pca, TREE_MODEL_NAMES_PCA,
+        pipeline=best_model_pipeline_pca,
+        shap_sample_size=SHAP_SAMPLE_SIZE_PCA,
+        shap_random_state=SHAP_RANDOM_STATE_PCA,
+        check_linear=True,
+    )
+    return shap_model_name_pca, shap_values_pca
+
+
+@app.cell
+def _(shap_model_name_pca, shap_values_pca):
+    from mathanx.ml.helpers import plot_shap_beeswarm as _plot_shap_beeswarm
+
+    _plot_shap_beeswarm(shap_values_pca, f"SHAP beeswarm for {shap_model_name_pca} (PCA predictors)")
+    return
+
+
+@app.cell
+def _(shap_model_name_pca, shap_values_pca):
+    from mathanx.ml.helpers import plot_shap_bar as _plot_shap_bar
+
+    _plot_shap_bar(shap_values_pca, f"Global SHAP importance for {shap_model_name_pca} (PCA predictors)")
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## 15. Experiment comparison
+
+    Compare best models, parameters, and top permutation importances across all four feature sets.
     """)
     return
 
@@ -962,12 +1112,15 @@ def _(
     best_model_name,
     best_model_name_five,
     best_model_name_no_model,
+    best_model_name_pca,
     model_summary_df,
     model_summary_df_five,
     model_summary_df_no_model,
+    model_summary_df_pca,
     pd,
     permutation_importance_df_five,
     permutation_importance_df_no_model,
+    permutation_importance_df_pca,
     top_permutation_importance_df,
 ):
     sections = []
@@ -976,15 +1129,16 @@ def _(
         ("All features", best_model_name, model_summary_df, top_permutation_importance_df),
         ("Without Model", best_model_name_no_model, model_summary_df_no_model, permutation_importance_df_no_model),
         ("Five predictors", best_model_name_five, model_summary_df_five, permutation_importance_df_five),
+        ("PCA components", best_model_name_pca, model_summary_df_pca, permutation_importance_df_pca),
     ]:
-        row = summ[summ["model"] == best]
+        _row = summ[summ["model"] == best]
         top3 = top_perm.head(3)["feature"].tolist() if top_perm is not None and len(top_perm) > 0 else []
         sections.append(
             {
                 "Feature set": label,
                 "Best model": best,
-                "Nested CV R²": f'{row.iloc[0]["mean_r2"]:.4f}' if len(row) > 0 else "",
-                "Nested CV RMSE": f'{row.iloc[0]["mean_rmse"]:.4f}' if len(row) > 0 else "",
+                "Nested CV R²": f'{_row.iloc[0]["mean_r2"]:.4f}' if len(_row) > 0 else "",
+                "Nested CV RMSE": f'{_row.iloc[0]["mean_rmse"]:.4f}' if len(_row) > 0 else "",
                 "Top 3 features": ", ".join(top3),
             }
         )
@@ -997,7 +1151,7 @@ def _(
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ## 15. Model confound analysis
+    ## 16. Model confound analysis
 
     The `Model` feature (which LLM architecture is used) dominates the full model with ~300x the importance of any anxiety feature.
     This section investigates whether the apparent positive anxiety-accuracy relationship is driven by between-model differences
@@ -1012,34 +1166,34 @@ def _(ml_df, pd, plt):
 
     anxiety_cols = ["amas_score", "maes_score", "mseaq_anx", "mseaq_se"]
 
-    within_rows = []
-    for model in ml_df["Model"].unique():
-        sub = ml_df[ml_df["Model"] == model]
-        row = {"Model": model, "n": len(sub)}
-        for col in anxiety_cols:
-            row[f"{col}_r"] = sub[col].corr(sub["accuracy"])
-        within_rows.append(row)
-    within_corr_df = pd.DataFrame(within_rows).sort_values("Model")
+    _within_rows = []
+    for _model in ml_df["Model"].unique():
+        _sub = ml_df[ml_df["Model"] == _model]
+        _row_pm = {"Model": _model, "n": len(_sub)}
+        for _col in anxiety_cols:
+            _row_pm[f"{_col}_r"] = _sub[_col].corr(_sub["accuracy"])
+        _within_rows.append(_row_pm)
+    within_corr_df = pd.DataFrame(_within_rows).sort_values("Model")
 
-    corr_cols = [c for c in within_corr_df.columns if c.endswith("_r")]
-    fig, axes = plt.subplots(4, 4, figsize=(16, 14))
-    models_sorted = sorted(ml_df["Model"].unique())
-    for idx, model in enumerate(models_sorted):
-        ax = axes[idx // 4, idx % 4]
-        sub = ml_df[ml_df["Model"] == model]
-        ax.scatter(sub["mseaq_anx"], sub["accuracy"], alpha=0.15, s=3, c="#648fff")
-        smooth = lowess(sub["accuracy"], sub["mseaq_anx"], frac=0.5, it=0, return_sorted=True)
-        ax.plot(smooth[:, 0], smooth[:, 1], "r-", linewidth=1.5)
-        ax.set_title(f"{model}", fontsize=8)
-        ax.set_xlabel("")
-        ax.set_ylabel("")
-        ax.tick_params(labelsize=6)
-    fig.suptitle("Accuracy vs MSEAQ Anxiety — one panel per model", fontsize=14, y=1.02)
-    fig.text(0.5, 0.01, "MSEAQ Anxiety", ha="center", fontsize=12)
-    fig.text(0.01, 0.5, "Accuracy", va="center", rotation=90, fontsize=12)
+    _corr_cols = [c for c in within_corr_df.columns if c.endswith("_r")]
+    _fig, _axes = plt.subplots(4, 4, figsize=(16, 14))
+    _models_sorted = sorted(ml_df["Model"].unique())
+    for _idx, _model in enumerate(_models_sorted):
+        _ax = _axes[_idx // 4, _idx % 4]
+        _sub = ml_df[ml_df["Model"] == _model]
+        _ax.scatter(_sub["mseaq_anx"], _sub["accuracy"], alpha=0.15, s=3, c="#648fff")
+        _smooth = lowess(_sub["accuracy"], _sub["mseaq_anx"], frac=0.5, it=0, return_sorted=True)
+        _ax.plot(_smooth[:, 0], _smooth[:, 1], "r-", linewidth=1.5)
+        _ax.set_title(f"{_model}", fontsize=8)
+        _ax.set_xlabel("")
+        _ax.set_ylabel("")
+        _ax.tick_params(labelsize=6)
+    _fig.suptitle("Accuracy vs MSEAQ Anxiety — one panel per model", fontsize=14, y=1.02)
+    _fig.text(0.5, 0.01, "MSEAQ Anxiety", ha="center", fontsize=12)
+    _fig.text(0.01, 0.5, "Accuracy", va="center", rotation=90, fontsize=12)
     plt.tight_layout()
     plt.show()
-    return anxiety_cols, corr_cols, within_corr_df
+    return anxiety_cols, within_corr_df
 
 
 @app.cell
@@ -1098,12 +1252,12 @@ def _(ml_df, plt):
     for _idx, feat in enumerate(anxiety_features):
         # FIXED: Changed 'axes' to '_axes'
         _ax = _axes[_idx // 2, _idx % 2] 
-    
+
         for _model in models:
             pt = model_means.loc[_model]
             _ax.scatter(pt[feat], pt["accuracy"], s=80, alpha=0.8)
             _ax.annotate(_model, (pt[feat], pt["accuracy"]), fontsize=7, alpha=0.8)
-        
+
         _ax.set_xlabel(f"Mean {feat}")
         _ax.set_ylabel("Mean accuracy")
         _ax.set_title(f"Between-model: {feat}", fontsize=12)
