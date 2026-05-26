@@ -1100,6 +1100,142 @@ def _(shap_model_name_pca, shap_values_pca):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
+    ## 14c. Nested CV with PCA components + Model
+
+    Re-run the experiment using PCA-derived psychometric components while retaining the `Model` variable.
+    """)
+    return
+
+
+@app.cell
+def _(RANDOM_STATE, X_pca):
+    from mathanx.ml.helpers import (
+        build_linear_pipeline as _build_linear_pipeline,
+        build_tree_pipeline as _build_tree_pipeline,
+        classify_columns as _classify_columns,
+        make_model_specs as _make_model_specs_pca_wm,
+    )
+
+    _col_types_wm = _classify_columns(X_pca)
+    _nominal_features_pca_wm = _col_types_wm["nominal_features"]
+    _tree_nominal_features_pca_wm = _col_types_wm["tree_nominal_features"]
+    _numeric_features_pca_wm = _col_types_wm["numeric_features"]
+
+    _build_linear_pca_wm = lambda m: _build_linear_pipeline(m, _numeric_features_pca_wm, _nominal_features_pca_wm)
+    _build_tree_pca_wm = lambda m: _build_tree_pipeline(m, _numeric_features_pca_wm, _tree_nominal_features_pca_wm)
+    model_specs_pca_wm = _make_model_specs_pca_wm(_build_linear_pca_wm, _build_tree_pca_wm, random_state=RANDOM_STATE)
+    return (model_specs_pca_wm,)
+
+
+@app.cell
+def _(X_pca, model_specs_pca_wm, y_pca):
+    from pathlib import Path as _Path
+
+    from mathanx.ml.config import RANDOM_STATE as RANDOM_STATE_PCA_WM
+    from mathanx.ml.helpers import (
+        load_experiment as _load_experiment_pca_wm,
+        run_experiment as _run_experiment_pca_wm,
+    )
+
+    _cache_dir = _Path("models/pca_with_model")
+    if _cache_dir.exists():
+        _result_pca_wm = _load_experiment_pca_wm(_cache_dir)
+    else:
+        _result_pca_wm = _run_experiment_pca_wm(X_pca, y_pca, model_specs_pca_wm, random_state=RANDOM_STATE_PCA_WM)
+
+    model_summary_df_pca_wm = _result_pca_wm.model_summary
+    best_model_name_pca_wm = _result_pca_wm.best_model_name
+    best_model_pipeline_pca_wm = _result_pca_wm.final_estimator
+    permutation_importance_df_pca_wm = _result_pca_wm.permutation_importance
+    return (
+        best_model_name_pca_wm,
+        best_model_pipeline_pca_wm,
+        model_summary_df_pca_wm,
+        permutation_importance_df_pca_wm,
+    )
+
+
+@app.cell
+def _(model_summary_df_pca_wm):
+    model_summary_df_pca_wm
+    return
+
+
+@app.cell
+def _(
+    best_model_name_pca_wm,
+    model_summary_df_pca_wm,
+    permutation_importance_df_pca_wm,
+):
+    if permutation_importance_df_pca_wm is not None and len(permutation_importance_df_pca_wm) > 0:
+        _best_row = model_summary_df_pca_wm[model_summary_df_pca_wm["model"] == best_model_name_pca_wm]
+        _top3 = permutation_importance_df_pca_wm.head(3)["feature"].tolist()
+        print(f"Best model: {best_model_name_pca_wm}")
+        print(f"Top 3 features: {', '.join(_top3)}")
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## 14d. SHAP explainability for PCA + Model
+
+    Explain the best PCA+Model model with SHAP.
+    """)
+    return
+
+
+@app.cell
+def _(SHAP_SAMPLE_SIZE, TREE_MODEL_NAMES):
+    SHAP_SAMPLE_SIZE_PCA_WM = SHAP_SAMPLE_SIZE
+    SHAP_RANDOM_STATE_PCA_WM = 42
+    TREE_MODEL_NAMES_PCA_WM = TREE_MODEL_NAMES
+    return SHAP_RANDOM_STATE_PCA_WM, SHAP_SAMPLE_SIZE_PCA_WM, TREE_MODEL_NAMES_PCA_WM
+
+
+@app.cell
+def _(
+    SHAP_RANDOM_STATE_PCA_WM,
+    SHAP_SAMPLE_SIZE_PCA_WM,
+    TREE_MODEL_NAMES_PCA_WM,
+    X_pca,
+    best_model_name_pca_wm,
+    best_model_pipeline_pca_wm,
+    model_summary_df_pca_wm,
+    y_pca,
+):
+    from mathanx.ml.helpers import run_shap_analysis as _run_shap_analysis
+
+    shap_values_pca_wm, shap_model_name_pca_wm = _run_shap_analysis(
+        X_pca, y_pca, {}, best_model_name_pca_wm, {},
+        model_summary_df_pca_wm, TREE_MODEL_NAMES_PCA_WM,
+        pipeline=best_model_pipeline_pca_wm,
+        shap_sample_size=SHAP_SAMPLE_SIZE_PCA_WM,
+        shap_random_state=SHAP_RANDOM_STATE_PCA_WM,
+        check_linear=True,
+    )
+    return shap_model_name_pca_wm, shap_values_pca_wm
+
+
+@app.cell
+def _(shap_model_name_pca_wm, shap_values_pca_wm):
+    from mathanx.ml.helpers import plot_shap_beeswarm as _plot_shap_beeswarm
+
+    _plot_shap_beeswarm(shap_values_pca_wm, f"SHAP beeswarm for {shap_model_name_pca_wm} (PCA + Model)")
+    return
+
+
+@app.cell
+def _(shap_model_name_pca_wm, shap_values_pca_wm):
+    from mathanx.ml.helpers import plot_shap_bar as _plot_shap_bar
+
+    _plot_shap_bar(shap_values_pca_wm, f"Global SHAP importance for {shap_model_name_pca_wm} (PCA + Model)")
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
     ## 15. Experiment comparison
 
     Compare best models, parameters, and top permutation importances across all four feature sets.
@@ -1113,14 +1249,17 @@ def _(
     best_model_name_five,
     best_model_name_no_model,
     best_model_name_pca,
+    best_model_name_pca_wm,
     model_summary_df,
     model_summary_df_five,
     model_summary_df_no_model,
     model_summary_df_pca,
+    model_summary_df_pca_wm,
     pd,
     permutation_importance_df_five,
     permutation_importance_df_no_model,
     permutation_importance_df_pca,
+    permutation_importance_df_pca_wm,
     top_permutation_importance_df,
 ):
     sections = []
@@ -1130,6 +1269,7 @@ def _(
         ("Without Model", best_model_name_no_model, model_summary_df_no_model, permutation_importance_df_no_model),
         ("Five predictors", best_model_name_five, model_summary_df_five, permutation_importance_df_five),
         ("PCA components", best_model_name_pca, model_summary_df_pca, permutation_importance_df_pca),
+        ("PCA + Model", best_model_name_pca_wm, model_summary_df_pca_wm, permutation_importance_df_pca_wm),
     ]:
         _row = summ[summ["model"] == best]
         top3 = top_perm.head(3)["feature"].tolist() if top_perm is not None and len(top_perm) > 0 else []
