@@ -12,7 +12,9 @@ def _():
     import marimo as mo
     import pandas as pd
 
-    return Path, mo, pd, re
+    from mathanx.constants import MAPPING_CALL1_QUESTIONS
+
+    return MAPPING_CALL1_QUESTIONS, Path, mo, pd, re
 
 
 @app.cell(hide_code=True)
@@ -133,6 +135,34 @@ def _(fallacies_df):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
+    ## TFMN Dataset
+    The dataset containing results from the textual forma mentis analysis.
+    """)
+    return
+
+
+@app.cell
+def _(Path, pd):
+    path_tfmn = Path("data/processed/validations/task-1/tfmn_dataset.csv").resolve().absolute()
+    tfmn_df = pd.read_csv(path_tfmn)
+    tfmn_df.head()
+    return (tfmn_df,)
+
+
+@app.cell
+def _(MAPPING_CALL1_QUESTIONS, tfmn_df):
+    # Map the questions with their number, then filter only for question 1
+    tfmn_df["question_number"] = tfmn_df["question_number"].replace(MAPPING_CALL1_QUESTIONS)
+    tfmn_df_q1 = tfmn_df.query("question_number == 1")
+    z_scores_cols = [x for x in tfmn_df_q1.columns if "z_scores" in x]
+    print(z_scores_cols)
+    tfmn_df_q1.head()
+    return tfmn_df_q1, z_scores_cols
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
     ## ML dataset merge
 
     In this section we merge the three dataframes to produce a single tabular representation of the data to train ML models later on.
@@ -141,11 +171,19 @@ def _(mo):
 
 
 @app.cell
-def _(demographics_reduced_df, human_task2_df, task4_df):
+def _(
+    demographics_reduced_df,
+    human_task2_df,
+    task4_df,
+    tfmn_df_q1,
+    z_scores_cols,
+):
     final_ml_dataset = demographics_reduced_df\
         .merge(human_task2_df, how="inner", on="run_id")\
         .merge(task4_df, how="inner", on="run_id")\
-        # .merge(df_fallacies_final, how="inner", on="run_id")
+        .merge(tfmn_df_q1[["run_id", *z_scores_cols]], how="inner", on="run_id")
+        # .merge(df_fallacies_final, how="inner", on="run_id")\
+
     final_ml_dataset.head()
     return (final_ml_dataset,)
 
