@@ -1190,7 +1190,11 @@ def _(SHAP_SAMPLE_SIZE, TREE_MODEL_NAMES):
     SHAP_SAMPLE_SIZE_PCA_WM = SHAP_SAMPLE_SIZE
     SHAP_RANDOM_STATE_PCA_WM = 42
     TREE_MODEL_NAMES_PCA_WM = TREE_MODEL_NAMES
-    return SHAP_RANDOM_STATE_PCA_WM, SHAP_SAMPLE_SIZE_PCA_WM, TREE_MODEL_NAMES_PCA_WM
+    return (
+        SHAP_RANDOM_STATE_PCA_WM,
+        SHAP_SAMPLE_SIZE_PCA_WM,
+        TREE_MODEL_NAMES_PCA_WM,
+    )
 
 
 @app.cell
@@ -1404,6 +1408,769 @@ def _(ml_df, plt):
 
     plt.tight_layout()
     plt.show()
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## 17. Filtered experiments (excluding top performers)
+
+    The same five experiments re-run on a dataset that excludes `TOP_PERFORMERS`
+    (Grok 4.1 Fast (Reasoning) and DeepSeek Chat) to test whether model performance
+    insights hold when ceiling-effect models are removed.
+    """)
+    return
+
+
+@app.cell
+def _(LEAKAGE_COLS, TARGET, ml_df):
+    import joblib as _joblib
+
+    from mathanx.ml.config import (
+        PCA_COMPONENT_COLUMNS as _PCA_COMPONENT_COLUMNS,
+        PCA_TRANSFORM_PATH as _PCA_TRANSFORM_PATH,
+        PSYCH_SCORE_COLUMNS as _PSYCH_SCORE_COLUMNS,
+        TOP_PERFORMERS,
+    )
+    from mathanx.ml.helpers import classify_columns as _classify_columns
+
+    ml_df_no_top = ml_df[~ml_df["Model"].isin(TOP_PERFORMERS)].reset_index(drop=True)
+
+    _feature_cols_no_top = [
+        c for c in ml_df_no_top.columns
+        if c not in LEAKAGE_COLS and c not in {TARGET, "education_vs_parent_mean_gap"}
+    ]
+    X_no_top = ml_df_no_top.loc[:, _feature_cols_no_top].copy()
+    y_no_top = ml_df_no_top[TARGET].copy()
+
+    _col_types_no_top = _classify_columns(X_no_top)
+    numeric_features_no_top = _col_types_no_top["numeric_features"]
+    nominal_features_no_top = _col_types_no_top["nominal_features"]
+    tree_nominal_features_no_top = _col_types_no_top["tree_nominal_features"]
+
+    _feature_cols_pca_no_top = [
+        c for c in ml_df_no_top.columns
+        if c not in LEAKAGE_COLS and c not in {TARGET}
+    ]
+    X_pca_no_top = ml_df_no_top.loc[:, _feature_cols_pca_no_top].copy()
+    _pca_data = _joblib.load(_PCA_TRANSFORM_PATH)
+    _pc_scores = _pca_data["pca"].transform(
+        _pca_data["scaler"].transform(ml_df_no_top[_PSYCH_SCORE_COLUMNS])
+    )
+    X_pca_no_top = X_pca_no_top.drop(columns=_PSYCH_SCORE_COLUMNS)
+    X_pca_no_top[_PCA_COMPONENT_COLUMNS[0]] = _pc_scores[:, 0]
+    X_pca_no_top[_PCA_COMPONENT_COLUMNS[1]] = _pc_scores[:, 1]
+    y_pca_no_top = ml_df_no_top[TARGET].copy()
+    return (
+        X_no_top,
+        X_pca_no_top,
+        ml_df_no_top,
+        nominal_features_no_top,
+        numeric_features_no_top,
+        tree_nominal_features_no_top,
+        y_no_top,
+        y_pca_no_top,
+    )
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ### 17a. All features (no top performers)
+
+    Full feature set including the `Model` variable, trained on the filtered dataset.
+    """)
+    return
+
+
+@app.cell
+def _(
+    X_no_top,
+    nominal_features_no_top,
+    numeric_features_no_top,
+    tree_nominal_features_no_top,
+    y_no_top,
+):
+    from pathlib import Path as _Path
+
+    from mathanx.ml.config import RANDOM_STATE as _RANDOM_STATE
+    from mathanx.ml.helpers import (
+        build_linear_pipeline as _build_linear_pipeline,
+        build_tree_pipeline as _build_tree_pipeline,
+        load_experiment as _load_experiment,
+        make_model_specs as _make_model_specs,
+        run_experiment as _run_experiment,
+    )
+
+    _build_linear = lambda m: _build_linear_pipeline(m, numeric_features_no_top, nominal_features_no_top)
+    _build_tree = lambda m: _build_tree_pipeline(m, numeric_features_no_top, tree_nominal_features_no_top)
+    model_specs_no_top = _make_model_specs(_build_linear, _build_tree, random_state=_RANDOM_STATE)
+
+    _cache_dir = _Path("models/all_features_no_top")
+    if _cache_dir.exists():
+        _result = _load_experiment(_cache_dir)
+    else:
+        _result = _run_experiment(X_no_top, y_no_top, model_specs_no_top, random_state=_RANDOM_STATE)
+
+    model_summary_df_no_top = _result.model_summary
+    best_params_by_model_no_top = _result.best_params_by_model
+    best_model_name_no_top = _result.best_model_name
+    tuned_cv_results_df_no_top = _result.tuned_cv_results
+    permutation_importance_df_no_top = _result.permutation_importance
+    top_permutation_importance_df_no_top = (
+        permutation_importance_df_no_top.head(20)
+        if permutation_importance_df_no_top is not None
+        else None
+    )
+    return (
+        best_model_name_no_top,
+        best_params_by_model_no_top,
+        model_specs_no_top,
+        model_summary_df_no_top,
+        permutation_importance_df_no_top,
+        top_permutation_importance_df_no_top,
+        tuned_cv_results_df_no_top,
+    )
+
+
+@app.cell
+def _(model_summary_df_no_top):
+    model_summary_df_no_top
+    return
+
+
+@app.cell
+def _(top_permutation_importance_df_no_top):
+    top_permutation_importance_df_no_top
+    return
+
+
+@app.cell
+def _(mo):
+    METRIC_NO_TOP = mo.ui.radio(
+        options=["mean_rmse", "mean_mae", "mean_r2"],
+        label="Select the metric of interest (no top performers):",
+        value="mean_r2",
+    )
+    METRIC_NO_TOP
+    return (METRIC_NO_TOP,)
+
+
+@app.cell
+def _(METRIC_NO_TOP, model_summary_df_no_top, plt, sns):
+    _fig, _ax = plt.subplots(figsize=(10, 5))
+    sns.barplot(data=model_summary_df_no_top, x=METRIC_NO_TOP.value, y="model", ax=_ax, color="#648fff")
+    _ax.set_title(f"Nested CV {METRIC_NO_TOP.value} by model (no top performers)")
+    _ax.set_xlabel(f"{METRIC_NO_TOP.value.capitalize().replace('_', ' ')}")
+    _ax.set_ylabel("Model")
+    plt.tight_layout()
+    _fig
+    return
+
+
+@app.cell
+def _(model_summary_df_no_top, tuned_cv_results_df_no_top):
+    _model_comparison_df = model_summary_df_no_top.merge(
+        tuned_cv_results_df_no_top[["model", "mean_rmse", "mean_mae", "mean_r2"]],
+        on="model",
+        suffixes=("_nested", "_tuned"),
+    )
+    _model_comparison_df
+    return
+
+
+@app.cell
+def _(plt, sns, top_permutation_importance_df_no_top):
+    _fig, _ax = plt.subplots(figsize=(10, 8))
+    sns.barplot(
+        data=top_permutation_importance_df_no_top,
+        x="importance_mean", y="feature", ax=_ax, color="#fe6100",
+    )
+    _ax.set_title("Top permutation importances for best tuned model (no top performers)")
+    _ax.set_xlabel("Importance")
+    _ax.set_ylabel("Feature")
+    plt.tight_layout()
+    _fig
+    return
+
+
+@app.cell
+def _(
+    SHAP_SAMPLE_SIZE,
+    TREE_MODEL_NAMES,
+    X_no_top,
+    best_model_name_no_top,
+    best_params_by_model_no_top,
+    model_specs_no_top,
+    model_summary_df_no_top,
+    y_no_top,
+):
+    from mathanx.ml.helpers import run_shap_analysis as _run_shap_analysis
+
+    shap_values_no_top, shap_model_name_no_top = _run_shap_analysis(
+        X_no_top, y_no_top, model_specs_no_top, best_model_name_no_top,
+        best_params_by_model_no_top, model_summary_df_no_top,
+        TREE_MODEL_NAMES,
+        shap_sample_size=SHAP_SAMPLE_SIZE, shap_random_state=42,
+    )
+    return shap_model_name_no_top, shap_values_no_top
+
+
+@app.cell
+def _(FIG_PATH, shap, shap_model_name_no_top, shap_values_no_top):
+    from mathanx.ml.helpers import plot_shap_beeswarm as _plot_shap_beeswarm
+
+    _indices = [i for i, _name in enumerate(shap_values_no_top.feature_names) if _name != "Model"]
+    shap_values_filtered_no_top = shap.Explanation(
+        values=shap_values_no_top.values[:, _indices],
+        base_values=shap_values_no_top.base_values,
+        data=shap_values_no_top.data[:, _indices] if shap_values_no_top.data is not None else None,
+        feature_names=[shap_values_no_top.feature_names[i] for i in _indices],
+    )
+
+    _fig = _plot_shap_beeswarm(
+        shap_values_filtered_no_top,
+        f"SHAP beeswarm for {shap_model_name_no_top} (no top performers, model excluded)",
+    )
+    _fig.savefig(FIG_PATH / "beeswarm_all_predictors_model_excluded_no_top.pdf", format="pdf")
+    _fig.savefig(FIG_PATH / "beeswarm_all_predictors_model_excluded_no_top.png", format="png")
+    _fig
+    return (shap_values_filtered_no_top,)
+
+
+@app.cell
+def _(shap_model_name_no_top, shap_values_filtered_no_top):
+    from mathanx.ml.helpers import plot_shap_bar as _plot_shap_bar
+
+    _plot_shap_bar(
+        shap_values_filtered_no_top,
+        f"Global SHAP importance for {shap_model_name_no_top} (no top performers, without Model)",
+    )
+    return
+
+
+@app.cell
+def _(shap_model_name_no_top, shap_values_no_top):
+    from mathanx.ml.helpers import plot_shap_beeswarm as _plot_shap_beeswarm
+
+    _plot_shap_beeswarm(
+        shap_values_no_top,
+        f"SHAP beeswarm for {shap_model_name_no_top} (no top performers)",
+    )
+    return
+
+
+@app.cell
+def _(shap_model_name_no_top, shap_values_no_top):
+    from mathanx.ml.helpers import plot_shap_bar as _plot_shap_bar
+
+    _plot_shap_bar(
+        shap_values_no_top,
+        f"Global SHAP importance for {shap_model_name_no_top} (no top performers)",
+    )
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ### 17b. Without Model (no top performers)
+
+    All non-leakage features except `Model`, trained on the filtered dataset.
+    """)
+    return
+
+
+@app.cell
+def _(
+    X_no_top,
+    nominal_features_no_top,
+    numeric_features_no_top,
+    tree_nominal_features_no_top,
+    y_no_top,
+):
+    from pathlib import Path as _Path
+
+    from mathanx.ml.config import RANDOM_STATE as _RANDOM_STATE
+    from mathanx.ml.helpers import (
+        build_linear_pipeline as _build_linear_pipeline,
+        build_tree_pipeline as _build_tree_pipeline,
+        load_experiment as _load_experiment,
+        make_model_specs as _make_model_specs,
+        run_experiment as _run_experiment,
+    )
+
+    _numeric_f = [c for c in numeric_features_no_top if c != "Model"]
+    _nominal_f = [c for c in nominal_features_no_top if c != "Model"]
+    _tree_nominal_f = [c for c in tree_nominal_features_no_top if c != "Model"]
+    model_specs_no_model_no_top = _make_model_specs(
+        lambda m: _build_linear_pipeline(m, _numeric_f, _nominal_f),
+        lambda m: _build_tree_pipeline(m, _numeric_f, _tree_nominal_f),
+        random_state=_RANDOM_STATE,
+    )
+
+    _cache_dir = _Path("models/no_model_no_top")
+    if _cache_dir.exists():
+        _result = _load_experiment(_cache_dir)
+    else:
+        _result = _run_experiment(X_no_top, y_no_top, model_specs_no_model_no_top, random_state=_RANDOM_STATE)
+
+    model_summary_df_no_model_no_top = _result.model_summary
+    best_model_name_no_model_no_top = _result.best_model_name
+    best_params_by_model_no_model_no_top = _result.best_params_by_model
+    permutation_importance_df_no_model_no_top = _result.permutation_importance
+    return (
+        best_model_name_no_model_no_top,
+        best_params_by_model_no_model_no_top,
+        model_specs_no_model_no_top,
+        model_summary_df_no_model_no_top,
+        permutation_importance_df_no_model_no_top,
+    )
+
+
+@app.cell
+def _(model_summary_df_no_model_no_top):
+    model_summary_df_no_model_no_top
+    return
+
+
+@app.cell
+def _(permutation_importance_df_no_model_no_top):
+    if permutation_importance_df_no_model_no_top is not None:
+        print(permutation_importance_df_no_model_no_top)
+    return
+
+
+@app.cell
+def _(
+    SHAP_SAMPLE_SIZE,
+    TREE_MODEL_NAMES,
+    X_no_top,
+    best_model_name_no_model_no_top,
+    best_params_by_model_no_model_no_top,
+    model_specs_no_model_no_top,
+    model_summary_df_no_model_no_top,
+    y_no_top,
+):
+    from mathanx.ml.helpers import run_shap_analysis as _run_shap_analysis
+
+    shap_values_no_model_no_top, shap_model_name_no_model_no_top = _run_shap_analysis(
+        X_no_top, y_no_top, model_specs_no_model_no_top,
+        best_model_name_no_model_no_top,
+        best_params_by_model_no_model_no_top,
+        model_summary_df_no_model_no_top,
+        TREE_MODEL_NAMES,
+        shap_sample_size=SHAP_SAMPLE_SIZE, shap_random_state=42,
+    )
+    return shap_model_name_no_model_no_top, shap_values_no_model_no_top
+
+
+@app.cell
+def _(FIG_PATH, shap_model_name_no_model_no_top, shap_values_no_model_no_top):
+    from mathanx.ml.helpers import plot_shap_beeswarm as _plot_shap_beeswarm
+
+    _fig = _plot_shap_beeswarm(
+        shap_values_no_model_no_top,
+        f"SHAP beeswarm for {shap_model_name_no_model_no_top} (no top performers, without Model)",
+    )
+    _fig.savefig(FIG_PATH / "beeswarm_no_model_no_top.pdf", format="pdf")
+    _fig.savefig(FIG_PATH / "beeswarm_no_model_no_top.png", format="png")
+    _fig
+    return
+
+
+@app.cell
+def _(shap_model_name_no_model_no_top, shap_values_no_model_no_top):
+    from mathanx.ml.helpers import plot_shap_bar as _plot_shap_bar
+
+    _plot_shap_bar(
+        shap_values_no_model_no_top,
+        f"Global SHAP importance for {shap_model_name_no_model_no_top} (no top performers, without Model)",
+    )
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ### 17c. Five predictors (no top performers)
+
+    Only `mseaq_anx`, `amas_score`, `maes_score`, `mseaq_se`, trained on the filtered dataset.
+    """)
+    return
+
+
+@app.cell
+def _(StandardScaler, TARGET, ml_df_no_top):
+    from pathlib import Path as _Path
+    import pandas as _pd
+
+    from mathanx.ml.config import FIVE_FEATURE_COLUMNS as _FIVE_FEATURE_COLUMNS, RANDOM_STATE as _RANDOM_STATE
+    from mathanx.ml.helpers import (
+        build_linear_pipeline as _build_linear_pipeline,
+        build_tree_pipeline as _build_tree_pipeline,
+        classify_columns as _classify_columns,
+        load_experiment as _load_experiment,
+        make_model_specs as _make_model_specs,
+        run_experiment as _run_experiment,
+        Pipeline as _Pipeline
+    )
+
+    X_five_no_top = ml_df_no_top.loc[:, _FIVE_FEATURE_COLUMNS].copy()
+    y_five_no_top = ml_df_no_top[TARGET].copy()
+
+    _build_linear_five = lambda m: _Pipeline([("scale", StandardScaler()), ("model", m)])
+    _build_tree_five = lambda m: _Pipeline([("model", m)])
+    model_specs_five_no_top = _make_model_specs(
+        _build_linear_five, _build_tree_five, random_state=_RANDOM_STATE,
+    )
+
+    _cache_dir = _Path("models/five_predictors_no_top")
+    if _cache_dir.exists():
+        _result_five = _load_experiment(_cache_dir)
+    else:
+        _result_five = _run_experiment(X_five_no_top, y_five_no_top, model_specs_five_no_top, random_state=_RANDOM_STATE)
+
+    model_summary_df_five_no_top = _result_five.model_summary
+    best_model_name_five_no_top = _result_five.best_model_name
+    best_model_pipeline_five_no_top = _result_five.final_estimator
+    permutation_importance_df_five_no_top = _result_five.permutation_importance
+    return (
+        X_five_no_top,
+        best_model_name_five_no_top,
+        best_model_pipeline_five_no_top,
+        model_summary_df_five_no_top,
+        permutation_importance_df_five_no_top,
+        y_five_no_top,
+    )
+
+
+@app.cell
+def _(model_summary_df_five_no_top):
+    model_summary_df_five_no_top
+    return
+
+
+@app.cell
+def _(
+    SHAP_SAMPLE_SIZE,
+    TREE_MODEL_NAMES,
+    X_five_no_top,
+    best_model_name_five_no_top,
+    best_model_pipeline_five_no_top,
+    model_summary_df_five_no_top,
+    y_five_no_top,
+):
+    from mathanx.ml.helpers import run_shap_analysis as _run_shap_analysis
+
+    shap_values_five_no_top, shap_model_name_five_no_top = _run_shap_analysis(
+        X_five_no_top, y_five_no_top, {}, best_model_name_five_no_top, {},
+        model_summary_df_five_no_top, TREE_MODEL_NAMES,
+        pipeline=best_model_pipeline_five_no_top,
+        shap_sample_size=SHAP_SAMPLE_SIZE, shap_random_state=42,
+        check_linear=True,
+    )
+    return shap_model_name_five_no_top, shap_values_five_no_top
+
+
+@app.cell
+def _(shap_model_name_five_no_top, shap_values_five_no_top):
+    from mathanx.ml.helpers import plot_shap_beeswarm as _plot_shap_beeswarm
+
+    _plot_shap_beeswarm(
+        shap_values_five_no_top,
+        f"SHAP beeswarm for {shap_model_name_five_no_top} (no top performers, selected predictors)",
+    )
+    return
+
+
+@app.cell
+def _(shap_model_name_five_no_top, shap_values_five_no_top):
+    from mathanx.ml.helpers import plot_shap_bar as _plot_shap_bar
+
+    _plot_shap_bar(
+        shap_values_five_no_top,
+        f"Global SHAP importance for {shap_model_name_five_no_top} (no top performers, selected predictors)",
+    )
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ### 17d. PCA predictors (no top performers)
+
+    PCA-derived psychometric components (PC1, PC2) without the `Model` variable, trained on the filtered dataset.
+    """)
+    return
+
+
+@app.cell
+def _(X_pca_no_top, y_pca_no_top):
+    from pathlib import Path as _Path
+
+    from mathanx.ml.config import RANDOM_STATE as _RANDOM_STATE
+    from mathanx.ml.helpers import (
+        build_linear_pipeline as _build_linear_pipeline,
+        build_tree_pipeline as _build_tree_pipeline,
+        classify_columns as _classify_columns,
+        load_experiment as _load_experiment,
+        make_model_specs as _make_model_specs,
+        run_experiment as _run_experiment,
+    )
+
+    _col_types_pca = _classify_columns(X_pca_no_top)
+    _nominal_f = [c for c in _col_types_pca["nominal_features"] if c != "Model"]
+    _tree_nominal_f = [c for c in _col_types_pca["tree_nominal_features"] if c != "Model"]
+    _numeric_f = [c for c in _col_types_pca["numeric_features"] if c != "Model"]
+
+    model_specs_pca_no_top = _make_model_specs(
+        lambda m: _build_linear_pipeline(m, _numeric_f, _nominal_f),
+        lambda m: _build_tree_pipeline(m, _numeric_f, _tree_nominal_f),
+        random_state=_RANDOM_STATE,
+    )
+
+    _cache_dir = _Path("models/pca_predictors_no_top")
+    if _cache_dir.exists():
+        _result = _load_experiment(_cache_dir)
+    else:
+        _result = _run_experiment(X_pca_no_top, y_pca_no_top, model_specs_pca_no_top, random_state=_RANDOM_STATE)
+
+    model_summary_df_pca_no_top = _result.model_summary
+    best_model_name_pca_no_top = _result.best_model_name
+    best_model_pipeline_pca_no_top = _result.final_estimator
+    permutation_importance_df_pca_no_top = _result.permutation_importance
+    return (
+        best_model_name_pca_no_top,
+        best_model_pipeline_pca_no_top,
+        model_summary_df_pca_no_top,
+        permutation_importance_df_pca_no_top,
+    )
+
+
+@app.cell
+def _(model_summary_df_pca_no_top):
+    model_summary_df_pca_no_top
+    return
+
+
+@app.cell
+def _(best_model_name_pca_no_top, permutation_importance_df_pca_no_top):
+    if permutation_importance_df_pca_no_top is not None and len(permutation_importance_df_pca_no_top) > 0:
+        _top3 = permutation_importance_df_pca_no_top.head(3)["feature"].tolist()
+        print(f"Best model: {best_model_name_pca_no_top}")
+        print(f"Top 3 features: {', '.join(_top3)}")
+    return
+
+
+@app.cell
+def _(
+    SHAP_SAMPLE_SIZE,
+    TREE_MODEL_NAMES,
+    X_pca_no_top,
+    best_model_name_pca_no_top,
+    best_model_pipeline_pca_no_top,
+    model_summary_df_pca_no_top,
+    y_pca_no_top,
+):
+    from mathanx.ml.helpers import run_shap_analysis as _run_shap_analysis
+
+    shap_values_pca_no_top, shap_model_name_pca_no_top = _run_shap_analysis(
+        X_pca_no_top, y_pca_no_top, {}, best_model_name_pca_no_top, {},
+        model_summary_df_pca_no_top, TREE_MODEL_NAMES,
+        pipeline=best_model_pipeline_pca_no_top,
+        shap_sample_size=SHAP_SAMPLE_SIZE, shap_random_state=42,
+        check_linear=True,
+    )
+    return shap_model_name_pca_no_top, shap_values_pca_no_top
+
+
+@app.cell
+def _(FIG_PATH, shap_model_name_pca_no_top, shap_values_pca_no_top):
+    from mathanx.ml.helpers import plot_shap_beeswarm as _plot_shap_beeswarm
+
+    _fig = _plot_shap_beeswarm(
+        shap_values_pca_no_top,
+        f"SHAP beeswarm for {shap_model_name_pca_no_top} (no top performers, PCA predictors)",
+    )
+    _fig.savefig(FIG_PATH / "beeswarm_shap_model_name_pca_no_top.png", format="png")
+    _fig.savefig(FIG_PATH / "beeswarm_shap_model_name_pca_no_top.pdf", format="pdf")
+    _fig
+    return
+
+
+@app.cell
+def _(shap_model_name_pca_no_top, shap_values_pca_no_top):
+    from mathanx.ml.helpers import plot_shap_bar as _plot_shap_bar
+
+    _plot_shap_bar(
+        shap_values_pca_no_top,
+        f"Global SHAP importance for {shap_model_name_pca_no_top} (no top performers, PCA predictors)",
+    )
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ### 17e. PCA + Model (no top performers)
+
+    PCA-derived psychometric components (PC1, PC2) with `Model`, trained on the filtered dataset.
+    """)
+    return
+
+
+@app.cell
+def _(X_pca_no_top, y_pca_no_top):
+    from pathlib import Path as _Path
+
+    from mathanx.ml.config import RANDOM_STATE as _RANDOM_STATE
+    from mathanx.ml.helpers import (
+        build_linear_pipeline as _build_linear_pipeline,
+        build_tree_pipeline as _build_tree_pipeline,
+        classify_columns as _classify_columns,
+        load_experiment as _load_experiment,
+        make_model_specs as _make_model_specs,
+        run_experiment as _run_experiment,
+    )
+
+    _col_types_pca = _classify_columns(X_pca_no_top)
+    _nominal_f = _col_types_pca["nominal_features"]
+    _tree_nominal_f = _col_types_pca["tree_nominal_features"]
+    _numeric_f = _col_types_pca["numeric_features"]
+
+    model_specs_pca_wm_no_top = _make_model_specs(
+        lambda m: _build_linear_pipeline(m, _numeric_f, _nominal_f),
+        lambda m: _build_tree_pipeline(m, _numeric_f, _tree_nominal_f),
+        random_state=_RANDOM_STATE,
+    )
+
+    _cache_dir = _Path("models/pca_with_model_no_top")
+    if _cache_dir.exists():
+        _result = _load_experiment(_cache_dir)
+    else:
+        _result = _run_experiment(X_pca_no_top, y_pca_no_top, model_specs_pca_wm_no_top, random_state=_RANDOM_STATE)
+
+    model_summary_df_pca_wm_no_top = _result.model_summary
+    best_model_name_pca_wm_no_top = _result.best_model_name
+    best_model_pipeline_pca_wm_no_top = _result.final_estimator
+    permutation_importance_df_pca_wm_no_top = _result.permutation_importance
+    return (
+        best_model_name_pca_wm_no_top,
+        best_model_pipeline_pca_wm_no_top,
+        model_summary_df_pca_wm_no_top,
+        permutation_importance_df_pca_wm_no_top,
+    )
+
+
+@app.cell
+def _(model_summary_df_pca_wm_no_top):
+    model_summary_df_pca_wm_no_top
+    return
+
+
+@app.cell
+def _(best_model_name_pca_wm_no_top, permutation_importance_df_pca_wm_no_top):
+    if permutation_importance_df_pca_wm_no_top is not None and len(permutation_importance_df_pca_wm_no_top) > 0:
+        _top3 = permutation_importance_df_pca_wm_no_top.head(3)["feature"].tolist()
+        print(f"Best model: {best_model_name_pca_wm_no_top}")
+        print(f"Top 3 features: {', '.join(_top3)}")
+    return
+
+
+@app.cell
+def _(
+    SHAP_SAMPLE_SIZE,
+    TREE_MODEL_NAMES,
+    X_pca_no_top,
+    best_model_name_pca_wm_no_top,
+    best_model_pipeline_pca_wm_no_top,
+    model_summary_df_pca_wm_no_top,
+    y_pca_no_top,
+):
+    from mathanx.ml.helpers import run_shap_analysis as _run_shap_analysis
+
+    shap_values_pca_wm_no_top, shap_model_name_pca_wm_no_top = _run_shap_analysis(
+        X_pca_no_top, y_pca_no_top, {}, best_model_name_pca_wm_no_top, {},
+        model_summary_df_pca_wm_no_top, TREE_MODEL_NAMES,
+        pipeline=best_model_pipeline_pca_wm_no_top,
+        shap_sample_size=SHAP_SAMPLE_SIZE, shap_random_state=42,
+        check_linear=True,
+    )
+    return shap_model_name_pca_wm_no_top, shap_values_pca_wm_no_top
+
+
+@app.cell
+def _(shap_model_name_pca_wm_no_top, shap_values_pca_wm_no_top):
+    from mathanx.ml.helpers import plot_shap_beeswarm as _plot_shap_beeswarm
+
+    _plot_shap_beeswarm(
+        shap_values_pca_wm_no_top,
+        f"SHAP beeswarm for {shap_model_name_pca_wm_no_top} (no top performers, PCA + Model)",
+    )
+    return
+
+
+@app.cell
+def _(shap_model_name_pca_wm_no_top, shap_values_pca_wm_no_top):
+    from mathanx.ml.helpers import plot_shap_bar as _plot_shap_bar
+
+    _plot_shap_bar(
+        shap_values_pca_wm_no_top,
+        f"Global SHAP importance for {shap_model_name_pca_wm_no_top} (no top performers, PCA + Model)",
+    )
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ### 17f. Experiment comparison (no top performers)
+
+    Compare best models, parameters, and top permutation importances across all five feature sets on the filtered dataset.
+    """)
+    return
+
+
+@app.cell
+def _(
+    best_model_name_five_no_top,
+    best_model_name_no_model_no_top,
+    best_model_name_no_top,
+    best_model_name_pca_no_top,
+    best_model_name_pca_wm_no_top,
+    model_summary_df_five_no_top,
+    model_summary_df_no_model_no_top,
+    model_summary_df_no_top,
+    model_summary_df_pca_no_top,
+    model_summary_df_pca_wm_no_top,
+    pd,
+    permutation_importance_df_five_no_top,
+    permutation_importance_df_no_model_no_top,
+    permutation_importance_df_no_top,
+    permutation_importance_df_pca_no_top,
+    permutation_importance_df_pca_wm_no_top,
+):
+    _sections = []
+    for _label, _best, _summ, _top_perm in [
+        ("All features", best_model_name_no_top, model_summary_df_no_top, permutation_importance_df_no_top),
+        ("Without Model", best_model_name_no_model_no_top, model_summary_df_no_model_no_top, permutation_importance_df_no_model_no_top),
+        ("Five predictors", best_model_name_five_no_top, model_summary_df_five_no_top, permutation_importance_df_five_no_top),
+        ("PCA components", best_model_name_pca_no_top, model_summary_df_pca_no_top, permutation_importance_df_pca_no_top),
+        ("PCA + Model", best_model_name_pca_wm_no_top, model_summary_df_pca_wm_no_top, permutation_importance_df_pca_wm_no_top),
+    ]:
+        _row = _summ[_summ["model"] == _best]
+        _top3 = _top_perm.head(3)["feature"].tolist() if _top_perm is not None and len(_top_perm) > 0 else []
+        _sections.append({
+            "Feature set": _label,
+            "Best model": _best,
+            "Nested CV R²": f'{_row.iloc[0]["mean_r2"]:.4f}' if len(_row) > 0 else "",
+            "Nested CV RMSE": f'{_row.iloc[0]["mean_rmse"]:.4f}' if len(_row) > 0 else "",
+            "Top 3 features": ", ".join(_top3),
+        })
+    _experiment_comparison_df = pd.DataFrame(_sections)
+    _experiment_comparison_df
     return
 
 
