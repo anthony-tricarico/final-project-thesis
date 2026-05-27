@@ -55,3 +55,8 @@ PCA_COMPONENT_COLUMNS: list[str] = [
     "PC1",
     "PC2",
 ]
+
+TOP_PERFORMERS: list[str] = [
+    "Grok 4.1 Fast (Reasoning)",
+    "DeepSeek Chat"
+]
