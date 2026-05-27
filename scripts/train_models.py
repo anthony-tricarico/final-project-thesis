@@ -2,13 +2,28 @@
 
 Usage:
     uv run python scripts/train_models.py
+    uv run python scripts/train_models.py --exclude-top-performers
+    uv run python scripts/train_models.py --model-name "Grok 4.1 Fast (Reasoning)"
+    uv run python scripts/train_models.py --experiments all_features no_model
+    uv run python scripts/train_models.py -e all_features --model-name "Ministral 3B"
 
 Replicates the five experiments from notebooks/ml_models.py and saves
 trained artifacts to models/{experiment_name}/ for later reuse.
+
+Filtering flags (composable):
+  --exclude-top-performers   Exclude TOP_PERFORMERS models from the dataset.
+  --model-name <name>        Only include data from a specific model.
+
+Experiment selection:
+  --experiments / -e         Space-separated list of experiment names to run
+                             (default: all five). Choices: all_features,
+                             no_model, five_predictors, pca_predictors,
+                             pca_with_model.
 """
 
 from __future__ import annotations
 
+import argparse
 from pathlib import Path
 
 import joblib
@@ -25,6 +40,7 @@ from mathanx.ml.config import (
     PSYCH_SCORE_COLUMNS,
     RANDOM_STATE,
     TARGET,
+    TOP_PERFORMERS,
 )
 from mathanx.ml.helpers import (
     build_linear_pipeline,
@@ -55,10 +71,79 @@ def _make_five_predictor_specs(random_state):
     )
 
 
+def _prepare_pca_data(df, feature_cols):
+    _pca_data = joblib.load(PCA_TRANSFORM_PATH)
+    _pc_scores = _pca_data["pca"].transform(
+        _pca_data["scaler"].transform(df[PSYCH_SCORE_COLUMNS])
+    )
+    X_pca = df.loc[:, feature_cols].copy()
+    X_pca = X_pca.drop(columns=PSYCH_SCORE_COLUMNS)
+    X_pca[PCA_COMPONENT_COLUMNS[0]] = _pc_scores[:, 0]
+    X_pca[PCA_COMPONENT_COLUMNS[1]] = _pc_scores[:, 1]
+    y_pca = df[TARGET].copy()
+    return X_pca, y_pca
+
+
+EXPERIMENT_CHOICES = [
+    "all_features",
+    "no_model",
+    "five_predictors",
+    "pca_predictors",
+    "pca_with_model",
+]
+
+
 def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--exclude-top-performers",
+        action="store_true",
+        help="Exclude TOP_PERFORMERS models from the dataset",
+    )
+    parser.add_argument(
+        "--experiments", "-e",
+        nargs="+",
+        choices=EXPERIMENT_CHOICES,
+        default=None,
+        help="Experiment(s) to run (default: all five)",
+    )
+    parser.add_argument(
+        "--model-name",
+        type=str,
+        default=None,
+        help="Only include data from a specific model (e.g. 'Grok 4.1 Fast (Reasoning)')",
+    )
+    args = parser.parse_args()
+
+    suffix_parts = []
+    if args.exclude_top_performers:
+        suffix_parts.append("_no_top")
+    if args.model_name:
+        slug = args.model_name.lower().replace(" ", "_").replace("(", "").replace(")", "").replace(".", "_")
+        suffix_parts.append(f"_{slug}")
+    suffix = "".join(suffix_parts)
+
     print("Loading dataset...")
     ml_df = pd.read_csv(DATASET_PATH)
     print(f"  Shape: {ml_df.shape}")
+
+    if args.exclude_top_performers:
+        n_before = len(ml_df)
+        ml_df = ml_df[~ml_df["Model"].isin(TOP_PERFORMERS)]
+        print(f"  Excluded {len(TOP_PERFORMERS)} top performer(s): "
+              f"{n_before} -> {len(ml_df)} rows")
+
+    if args.model_name:
+        available = sorted(ml_df["Model"].unique())
+        if args.model_name not in available:
+            raise ValueError(
+                f"Model '{args.model_name}' not found in dataset. "
+                f"Available models: {available}"
+            )
+        n_before = len(ml_df)
+        ml_df = ml_df[ml_df["Model"] == args.model_name].reset_index(drop=True)
+        print(f"  Filtered to model '{args.model_name}': "
+              f"{n_before} -> {len(ml_df)} rows")
 
     feature_cols = [
         c for c in ml_df.columns
@@ -75,20 +160,13 @@ def main():
     )
 
     print("  Preparing PCA-transformed dataset...")
-    _pca_data = joblib.load(PCA_TRANSFORM_PATH)
-    _pc_scores = _pca_data["pca"].transform(
-        _pca_data["scaler"].transform(ml_df[PSYCH_SCORE_COLUMNS])
-    )
-    X_pca = ml_df.loc[:, feature_cols].copy()
-    X_pca = X_pca.drop(columns=PSYCH_SCORE_COLUMNS)
-    X_pca[PCA_COMPONENT_COLUMNS[0]] = _pc_scores[:, 0]
-    X_pca[PCA_COMPONENT_COLUMNS[1]] = _pc_scores[:, 1]
-    y_pca = ml_df[TARGET].copy()
-    pca_col_types = classify_columns(X_pca)
+    _X_pca_full, _ = _prepare_pca_data(ml_df, feature_cols)
+    pca_col_types = classify_columns(_X_pca_full)
 
     experiments = [
         {
-            "name": "all_features",
+            "base_name": "all_features",
+            "name": f"all_features{suffix}",
             "get_xy": lambda df: (
                 df.loc[:, feature_cols].copy(),
                 df[TARGET].copy(),
@@ -100,7 +178,8 @@ def main():
             ),
         },
         {
-            "name": "no_model",
+            "base_name": "no_model",
+            "name": f"no_model{suffix}",
             "get_xy": lambda df: (
                 df.loc[:, feature_cols].copy(),
                 df[TARGET].copy(),
@@ -110,7 +189,8 @@ def main():
             ),
         },
         {
-            "name": "five_predictors",
+            "base_name": "five_predictors",
+            "name": f"five_predictors{suffix}",
             "get_xy": lambda df: (
                 df.loc[:, FIVE_FEATURE_COLUMNS].copy(),
                 df[TARGET].copy(),
@@ -118,8 +198,9 @@ def main():
             "build_specs": lambda: _make_five_predictor_specs(RANDOM_STATE),
         },
         {
-            "name": "pca_predictors",
-            "get_xy": lambda df: (X_pca, y_pca),
+            "base_name": "pca_predictors",
+            "name": f"pca_predictors{suffix}",
+            "get_xy": lambda df: _prepare_pca_data(df, feature_cols),
             "build_specs": lambda: make_model_specs(
                 lambda m: build_linear_pipeline(
                     m,
@@ -135,8 +216,9 @@ def main():
             ),
         },
         {
-            "name": "pca_with_model",
-            "get_xy": lambda df: (X_pca, y_pca),
+            "base_name": "pca_with_model",
+            "name": f"pca_with_model{suffix}",
+            "get_xy": lambda df: _prepare_pca_data(df, feature_cols),
             "build_specs": lambda: make_model_specs(
                 lambda m: build_linear_pipeline(
                     m,
@@ -152,6 +234,9 @@ def main():
             ),
         },
     ]
+
+    if args.experiments:
+        experiments = [e for e in experiments if e["base_name"] in args.experiments]
 
     for exp in experiments:
         name = exp["name"]

@@ -1,18 +1,71 @@
 # Training pipeline
 
-Trains the ML models used by `notebooks/ml_models.py` and caches the fitted artifacts so the notebook can skip retraining on every run.
+Trains the ML models used by `notebooks/ml_models.py` and caches the fitted
+artifacts so the notebook can skip retraining on every run.
 
 ## Quick start
 
 ```bash
+# Full run — all five experiments on complete dataset
 uv run python scripts/train_models.py
 ```
 
-This runs three experiments (all features, without Model, five predictors)
-and saves artifacts under `models/{experiment_name}/`.
-
 Once artifacts exist, opening `notebooks/ml_models.py` in Marimo will load
 them instead of re-running nested cross-validation.
+
+## CLI reference
+
+| Flag | Description |
+|------|-------------|
+| _(none)_ | Run all 5 experiments on the full dataset. |
+| `--exclude-top-performers` | Remove `TOP_PERFORMERS` rows; appends `_no_top` to experiment dirs. |
+| `--model-name NAME` | Filter to a single model (exact match); appends `_{slug}` to dirs. |
+| `--experiments` / `-e` | Space-separated subset of experiments to run (see below). |
+
+All flags are composable. Filtering order: `--model-name` first, then
+`--exclude-top-performers`.
+
+## Experiment selection
+
+Use `--experiments` / `-e` to run a subset:
+
+```bash
+# Run one experiment
+uv run python scripts/train_models.py -e all_features
+
+# Run two experiments
+uv run python scripts/train_models.py -e all_features five_predictors
+
+# Combine with other flags
+uv run python scripts/train_models.py -e all_features --exclude-top-performers
+uv run python scripts/train_models.py -e all_features --model-name "Ministral 3B"
+```
+
+Valid experiment names:
+
+| Name | Description |
+|------|-------------|
+| `all_features` | All 35 features including `Model`. |
+| `no_model` | Same features, `Model` column excluded. |
+| `five_predictors` | 5-best-predictors baseline. |
+| `pca_predictors` | Psychometric scores replaced by 2 PCA components, `Model` excluded. |
+| `pca_with_model` | Psychometric scores replaced by 2 PCA components, `Model` included. |
+
+## Filtering dataset rows
+
+```bash
+# Exclude the two top-performing models (DeepSeek Chat, Grok 4.1 Fast)
+uv run python scripts/train_models.py --exclude-top-performers
+
+# Train only on a specific model's data
+uv run python scripts/train_models.py --model-name "Ministral 3B"
+
+# Combine: specific model, excluding top performers, single experiment
+uv run python scripts/train_models.py -e all_features \
+    --model-name "Granite 4 Tiny" --exclude-top-performers
+```
+
+Invalid model names raise `ValueError` listing available models.
 
 ## Artifacts saved per experiment
 
@@ -30,11 +83,13 @@ models/{experiment_name}/
 
 ## Adding a new experiment
 
-Add a dict to the `experiments` list in `train_models.py`:
+Add a dict to the `experiments` list in `train_models.py`. Both `base_name`
+(the CLI-friendly identifier) and `name` (with suffix applied) are required:
 
 ```python
 {
-    "name": "only_demographics",
+    "base_name": "only_demographics",
+    "name": f"only_demographics{suffix}",
     "get_xy": lambda df: (
         df[["gender", "age", "education"]].copy(),
         df[TARGET].copy(),
@@ -46,6 +101,9 @@ Add a dict to the `experiments` list in `train_models.py`:
     ),
 }
 ```
+
+Also add `"only_demographics"` to `EXPERIMENT_CHOICES` so `--experiments`
+accepts it.
 
 ## Adding new models
 
@@ -66,9 +124,9 @@ model_specs = make_model_specs(build_linear, build_tree, extra_specs=extra)
 
 ## Regenerating artifacts
 
-Delete the relevant subdirectory under `models/` and re-run the script:
+Delete the subdirectory under `models/` and re-run:
 
 ```bash
-rm -rf models/all_features
-uv run python scripts/train_models.py
+rm -rf models/all_features_no_top
+uv run python scripts/train_models.py -e all_features --exclude-top-performers
 ```
