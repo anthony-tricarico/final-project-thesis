@@ -129,6 +129,12 @@ def _(fallacies_df):
             q6_fallacy_score = q6_mean,
     )
     df_fallacies_final.head()
+    return (df_fallacies_final,)
+
+
+@app.cell
+def _(df_fallacies_final):
+    len(df_fallacies_final)
     return
 
 
@@ -181,8 +187,8 @@ def _(
     final_ml_dataset = demographics_reduced_df\
         .merge(human_task2_df, how="inner", on="run_id")\
         .merge(task4_df, how="inner", on="run_id")\
-        .merge(tfmn_df_q1[["run_id", *z_scores_cols]], how="inner", on="run_id")
-        # .merge(df_fallacies_final, how="inner", on="run_id")\
+        .merge(tfmn_df_q1[["run_id", *z_scores_cols]], how="inner", on="run_id")\
+        # .merge(df_fallacies_final, how="left", on="run_id")\
 
     final_ml_dataset.head()
     return (final_ml_dataset,)
@@ -192,6 +198,24 @@ def _(
 def _(final_ml_dataset):
     # Check how many human personas we have in the final dataset
     len(final_ml_dataset)
+    return
+
+
+@app.cell
+def _(final_ml_dataset):
+    final_ml_dataset.isna().sum()
+    return
+
+
+@app.cell
+def _(final_ml_dataset):
+    final_ml_dataset[final_ml_dataset["q4_fallacy_score"].isna()]
+    return
+
+
+@app.cell
+def _(final_ml_dataset):
+    final_ml_dataset.groupby("Model").count()
     return
 
 
