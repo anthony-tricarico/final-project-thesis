@@ -10,76 +10,80 @@
 
 import json
 import re
-import string
 from typing import Any, Dict, List, Literal, Optional
-import unicodedata
 
 import numpy as np
 from pydantic import (
     BaseModel, Field, AliasChoices,
     model_validator, field_validator
 )
-import torch
-from transformers import BertTokenizer, BertModel
-
 
 from mathanx.constants import FORMA_MENTIS_CUES, MAPPING_CALL1_QUESTIONS  # noqa: E402
 
 TOPIC_POOL = list(MAPPING_CALL1_QUESTIONS.keys())
 
-# --- ALIGNMENT LOGIC (BERT) ---
-device = "cuda" if torch.cuda.is_available(
-) else "mps" if torch.backends.mps.is_available() else "cpu"
-tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
-bert_model = BertModel.from_pretrained(
-    "bert-base-uncased").to(device)  # type: ignore
-bert_model.eval()
-
-
-def normalize_text(text: str) -> str:
-    if not text:
-        return ""
-    text = text.lower()
-    text = unicodedata.normalize("NFKD", text)
-    text = text.translate(str.maketrans('', '', string.punctuation))
-    return " ".join(text.split())
-
-
-def get_embeddings(texts: List[str]):
-    tokens = tokenizer(texts, return_tensors="pt",
-                       padding=True, truncation=True).to(device)
-    with torch.no_grad():
-        outputs = bert_model(**tokens)
-        return outputs.last_hidden_state[:, 0, :].cpu().numpy()
-
 
 class SemanticAligner:
-    def __init__(self, topic_pool: List[str]):
+    def __init__(self, topic_pool: list[str]):
         self.topic_pool = topic_pool
-        self.pool_embeddings = get_embeddings(
-            [self.normalize(t) for t in topic_pool])
+        self._pool_embeddings = None
+        self._tokenizer = None
+        self._model = None
+        self._device = None
 
-    @ staticmethod
+    def _lazy_init(self):
+        if self._model is not None:
+            return
+        import torch
+        from transformers import BertTokenizer, BertModel
+
+        self._device = (
+            "cuda" if torch.cuda.is_available()
+            else "mps" if torch.backends.mps.is_available()
+            else "cpu"
+        )
+        self._tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
+        self._model = BertModel.from_pretrained("bert-base-uncased").to(self._device)
+        self._model.eval()
+
+    def _get_embeddings(self, texts: list[str]):
+        self._lazy_init()
+        tokens = self._tokenizer(
+            texts, return_tensors="pt", padding=True, truncation=True
+        ).to(self._device)
+        import torch
+        with torch.no_grad():
+            outputs = self._model(**tokens)
+            return outputs.last_hidden_state[:, 0, :].cpu().numpy()
+
+    def _get_pool_embeddings(self):
+        if self._pool_embeddings is None:
+            self._pool_embeddings = self._get_embeddings(
+                [self.normalize(t) for t in self.topic_pool]
+            )
+        return self._pool_embeddings
+
+    @staticmethod
     def normalize(text: str) -> str:
+        import string
         text = text.lower().translate(str.maketrans('', '', string.punctuation))
         return " ".join(text.split())
 
-    def align(self, raw_replies: Dict[str, str]):
+    def align(self, raw_replies: dict[str, str]):
         raw_questions = list(raw_replies.keys())
         if not raw_questions:
             return None, False
-        raw_embs = get_embeddings([self.normalize(q) for q in raw_questions])
-        norm_pool = self.pool_embeddings /\
-            np.linalg.norm(self.pool_embeddings, axis=1, keepdims=True)
+        pool_embs = self._get_pool_embeddings()
+        raw_embs = self._get_embeddings([self.normalize(q) for q in raw_questions])
+        norm_pool = pool_embs / np.linalg.norm(pool_embs, axis=1, keepdims=True)
         norm_raw = raw_embs / np.linalg.norm(raw_embs, axis=1, keepdims=True)
         sim_matrix = np.dot(norm_raw, norm_pool.T)
 
         corrected = {}
-        for i, _ in enumerate(raw_questions):
+        for i in range(len(raw_questions)):
             best_idx = np.argmax(sim_matrix[i])
             if sim_matrix[i][best_idx] >= 0.85:
-                corrected[self.topic_pool[best_idx]
-                          ] = raw_replies[raw_questions[i]]
+                corrected[self.topic_pool[best_idx]] = raw_replies[raw_questions[i]]
         return corrected, len(corrected) == len(self.topic_pool)
 
 

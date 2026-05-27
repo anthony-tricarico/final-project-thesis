@@ -3,7 +3,7 @@
 Usage:
     uv run python scripts/train_models.py
 
-Replicates the three experiments from notebooks/ml_models.py and saves
+Replicates the five experiments from notebooks/ml_models.py and saves
 trained artifacts to models/{experiment_name}/ for later reuse.
 """
 
@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import joblib
 import pandas as pd
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
@@ -19,6 +20,9 @@ from mathanx.ml.config import (
     DATASET_PATH,
     FIVE_FEATURE_COLUMNS,
     LEAKAGE_COLS,
+    PCA_COMPONENT_COLUMNS,
+    PCA_TRANSFORM_PATH,
+    PSYCH_SCORE_COLUMNS,
     RANDOM_STATE,
     TARGET,
 )
@@ -70,6 +74,18 @@ def main():
         f"({len(numeric_features)} numeric, {len(nominal_features)} nominal)"
     )
 
+    print("  Preparing PCA-transformed dataset...")
+    _pca_data = joblib.load(PCA_TRANSFORM_PATH)
+    _pc_scores = _pca_data["pca"].transform(
+        _pca_data["scaler"].transform(ml_df[PSYCH_SCORE_COLUMNS])
+    )
+    X_pca = ml_df.loc[:, feature_cols].copy()
+    X_pca = X_pca.drop(columns=PSYCH_SCORE_COLUMNS)
+    X_pca[PCA_COMPONENT_COLUMNS[0]] = _pc_scores[:, 0]
+    X_pca[PCA_COMPONENT_COLUMNS[1]] = _pc_scores[:, 1]
+    y_pca = ml_df[TARGET].copy()
+    pca_col_types = classify_columns(X_pca)
+
     experiments = [
         {
             "name": "all_features",
@@ -100,6 +116,40 @@ def main():
                 df[TARGET].copy(),
             ),
             "build_specs": lambda: _make_five_predictor_specs(RANDOM_STATE),
+        },
+        {
+            "name": "pca_predictors",
+            "get_xy": lambda df: (X_pca, y_pca),
+            "build_specs": lambda: make_model_specs(
+                lambda m: build_linear_pipeline(
+                    m,
+                    [c for c in pca_col_types["numeric_features"] if c != "Model"],
+                    [c for c in pca_col_types["nominal_features"] if c != "Model"],
+                ),
+                lambda m: build_tree_pipeline(
+                    m,
+                    [c for c in pca_col_types["numeric_features"] if c != "Model"],
+                    [c for c in pca_col_types["tree_nominal_features"] if c != "Model"],
+                ),
+                random_state=RANDOM_STATE,
+            ),
+        },
+        {
+            "name": "pca_with_model",
+            "get_xy": lambda df: (X_pca, y_pca),
+            "build_specs": lambda: make_model_specs(
+                lambda m: build_linear_pipeline(
+                    m,
+                    pca_col_types["numeric_features"],
+                    pca_col_types["nominal_features"],
+                ),
+                lambda m: build_tree_pipeline(
+                    m,
+                    pca_col_types["numeric_features"],
+                    pca_col_types["tree_nominal_features"],
+                ),
+                random_state=RANDOM_STATE,
+            ),
         },
     ]
 
