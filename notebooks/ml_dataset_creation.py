@@ -123,11 +123,14 @@ def _(fallacies_df):
     q5_mean = np.mean(fallacies_df_dropped[q5_cols], axis = 1)
     q6_mean = np.mean(fallacies_df_dropped[q6_cols], axis = 1)
 
-    df_fallacies_final = fallacies_df_dropped.drop([*q4_cols, *q5_cols, *q6_cols], axis = 1).assign(
-            q4_fallacy_score = q4_mean,
-            q5_fallacy_score = q5_mean,
-            q6_fallacy_score = q6_mean,
-    )
+    # df_fallacies_final = fallacies_df_dropped.drop([*q4_cols, *q5_cols, *q6_cols], axis = 1).assign(
+    #         q4_fallacy_score = q4_mean,
+    #         q5_fallacy_score = q5_mean,
+    #         q6_fallacy_score = q6_mean,
+    # )
+
+    df_fallacies_final = fallacies_df_dropped.drop([*q4_cols, *q5_cols, *q6_cols], axis = 1)
+    df_fallacies_final["fallacy_score"] = q4_mean + q5_mean + q6_mean
     df_fallacies_final.head()
     return (df_fallacies_final,)
 
