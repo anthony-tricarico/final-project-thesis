@@ -179,6 +179,7 @@ def _(mo):
 @app.cell
 def _(
     demographics_reduced_df,
+    df_fallacies_final,
     human_task2_df,
     task4_df,
     tfmn_df_q1,
@@ -188,7 +189,7 @@ def _(
         .merge(human_task2_df, how="inner", on="run_id")\
         .merge(task4_df, how="inner", on="run_id")\
         .merge(tfmn_df_q1[["run_id", *z_scores_cols]], how="inner", on="run_id")\
-        # .merge(df_fallacies_final, how="left", on="run_id")\
+        .merge(df_fallacies_final, how="inner", on="run_id")\
 
     final_ml_dataset.head()
     return (final_ml_dataset,)
