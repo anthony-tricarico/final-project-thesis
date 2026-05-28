@@ -769,12 +769,10 @@ def _(LEAKAGE_COLS, RANDOM_STATE, TARGET, ml_df, pd):
     return (
         X_all_features_confidence_scaled,
         best_model_name_all_features_confidence_scaled,
-        best_model_pipeline_all_features_confidence_scaled,
         best_params_by_model_all_features_confidence_scaled,
         best_params_summary_df_all_features_confidence_scaled,
         model_specs_all_features_confidence_scaled,
         model_summary_df_all_features_confidence_scaled,
-        top_permutation_importance_df_all_features_confidence_scaled,
         tuned_cv_results_df_all_features_confidence_scaled,
         y_all_features_confidence_scaled,
     )
@@ -817,7 +815,10 @@ def _(
         shap_sample_size=SHAP_SAMPLE_SIZE,
         shap_random_state=SHAP_RANDOM_STATE_ALL_FEATURES_CS,
     )
-    return shap_model_name_all_features_confidence_scaled, shap_values_all_features_confidence_scaled
+    return (
+        shap_model_name_all_features_confidence_scaled,
+        shap_values_all_features_confidence_scaled,
+    )
 
 
 @app.cell
@@ -827,7 +828,12 @@ def _(shap_values_all_features_confidence_scaled):
 
 
 @app.cell
-def _(FIG_PATH, shap, shap_model_name_all_features_confidence_scaled, shap_values_all_features_confidence_scaled):
+def _(
+    FIG_PATH,
+    shap,
+    shap_model_name_all_features_confidence_scaled,
+    shap_values_all_features_confidence_scaled,
+):
     from mathanx.ml.helpers import plot_shap_beeswarm as _plot_shap_beeswarm
 
     _indices = [
@@ -858,7 +864,10 @@ def _(FIG_PATH, shap, shap_model_name_all_features_confidence_scaled, shap_value
 
 
 @app.cell
-def _(shap_model_name_all_features_confidence_scaled, shap_values_filtered_all_features_confidence_scaled):
+def _(
+    shap_model_name_all_features_confidence_scaled,
+    shap_values_filtered_all_features_confidence_scaled,
+):
     from mathanx.ml.helpers import plot_shap_bar as _plot_shap_bar
 
     _plot_shap_bar(
@@ -869,7 +878,11 @@ def _(shap_model_name_all_features_confidence_scaled, shap_values_filtered_all_f
 
 
 @app.cell
-def _(FIG_PATH, shap_model_name_all_features_confidence_scaled, shap_values_all_features_confidence_scaled):
+def _(
+    FIG_PATH,
+    shap_model_name_all_features_confidence_scaled,
+    shap_values_all_features_confidence_scaled,
+):
     from mathanx.ml.helpers import plot_shap_beeswarm as _plot_shap_beeswarm
 
     _fig = _plot_shap_beeswarm(
@@ -884,7 +897,10 @@ def _(FIG_PATH, shap_model_name_all_features_confidence_scaled, shap_values_all_
 
 
 @app.cell
-def _(shap_model_name_all_features_confidence_scaled, shap_values_all_features_confidence_scaled):
+def _(
+    shap_model_name_all_features_confidence_scaled,
+    shap_values_all_features_confidence_scaled,
+):
     from mathanx.ml.helpers import plot_shap_bar as _plot_shap_bar
 
     _plot_shap_bar(
@@ -1024,6 +1040,248 @@ def _(shap_model_name_no_model, shap_values_no_model):
     from mathanx.ml.helpers import plot_shap_bar as _plot_shap_bar
 
     _plot_shap_bar(shap_values_no_model, f"Global SHAP importance for {shap_model_name_no_model} (without Model)")
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## 11b. Mistral family — no Model
+
+    Subset the dataset to only Mistral-family models and run the no-Model experiment to measure explanatory power for this architecture family.
+    """)
+    return
+
+
+@app.cell
+def _(RANDOM_STATE, X, model_specs_no_model, y):
+    from pathlib import Path as _Path
+
+    from mathanx.ml.config import MISTRAL_FAMILY
+    from mathanx.ml.helpers import (
+        load_experiment as _load_experiment_mistral,
+        run_experiment as _run_experiment_mistral,
+    )
+
+    mistral_mask = X["Model"].isin(MISTRAL_FAMILY)
+    X_mistral = X[mistral_mask].reset_index(drop=True)
+    y_mistral = y[mistral_mask].reset_index(drop=True)
+
+    _cache_dir = _Path("models/no_model_mistral_family")
+    if _cache_dir.exists():
+        _result_mistral = _load_experiment_mistral(_cache_dir)
+    else:
+        _result_mistral = _run_experiment_mistral(X_mistral, y_mistral, model_specs_no_model, random_state=RANDOM_STATE)
+
+    model_summary_df_mistral = _result_mistral.model_summary
+    best_params_by_model_mistral = _result_mistral.best_params_by_model
+    best_model_name_mistral = _result_mistral.best_model_name
+    permutation_importance_df_mistral = _result_mistral.permutation_importance
+    return (
+        X_mistral,
+        best_model_name_mistral,
+        best_params_by_model_mistral,
+        model_summary_df_mistral,
+        permutation_importance_df_mistral,
+        y_mistral,
+    )
+
+
+@app.cell
+def _(model_summary_df_mistral):
+    model_summary_df_mistral
+    return
+
+
+@app.cell
+def _(permutation_importance_df_mistral):
+    print(permutation_importance_df_mistral)
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## 11c. SHAP explainability for Mistral family
+
+    Explain the best Mistral-family model with SHAP.
+    """)
+    return
+
+
+@app.cell
+def _(SHAP_SAMPLE_SIZE, TREE_MODEL_NAMES):
+    SHAP_SAMPLE_SIZE_MISTRAL = SHAP_SAMPLE_SIZE
+    SHAP_RANDOM_STATE_MISTRAL = 42
+    TREE_MODEL_NAMES_MISTRAL = TREE_MODEL_NAMES
+    return (
+        SHAP_RANDOM_STATE_MISTRAL,
+        SHAP_SAMPLE_SIZE_MISTRAL,
+        TREE_MODEL_NAMES_MISTRAL,
+    )
+
+
+@app.cell
+def _(
+    SHAP_RANDOM_STATE_MISTRAL,
+    SHAP_SAMPLE_SIZE_MISTRAL,
+    TREE_MODEL_NAMES_MISTRAL,
+    X_mistral,
+    best_model_name_mistral,
+    best_params_by_model_mistral,
+    model_specs_no_model,
+    model_summary_df_mistral,
+    y_mistral,
+):
+    from mathanx.ml.helpers import run_shap_analysis as _run_shap_analysis
+
+    shap_values_mistral, shap_model_name_mistral = _run_shap_analysis(
+        X_mistral, y_mistral, model_specs_no_model, best_model_name_mistral,
+        best_params_by_model_mistral, model_summary_df_mistral,
+        TREE_MODEL_NAMES_MISTRAL,
+        shap_sample_size=SHAP_SAMPLE_SIZE_MISTRAL,
+        shap_random_state=SHAP_RANDOM_STATE_MISTRAL,
+    )
+    return shap_model_name_mistral, shap_values_mistral
+
+
+@app.cell
+def _(FIG_PATH, shap_model_name_mistral, shap_values_mistral):
+    from mathanx.ml.helpers import plot_shap_beeswarm as _plot_shap_beeswarm
+
+    _fig = _plot_shap_beeswarm(shap_values_mistral, f"SHAP beeswarm for {shap_model_name_mistral} (Mistral family, without Model)")
+    _fig.savefig(FIG_PATH / "beeswarm_no_model_mistral_family.pdf", format="pdf")
+    _fig.savefig(FIG_PATH / "beeswarm_no_model_mistral_family.png", format="png")
+    _fig
+    return
+
+
+@app.cell
+def _(shap_model_name_mistral, shap_values_mistral):
+    from mathanx.ml.helpers import plot_shap_bar as _plot_shap_bar
+
+    _plot_shap_bar(shap_values_mistral, f"Global SHAP importance for {shap_model_name_mistral} (Mistral family, without Model)")
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## 11d. Qwen3 family — no Model
+
+    Subset the dataset to only Qwen3-family models and run the no-Model experiment to measure explanatory power for this architecture family.
+    """)
+    return
+
+
+@app.cell
+def _(RANDOM_STATE, X, model_specs_no_model, y):
+    from pathlib import Path as _Path
+
+    from mathanx.ml.config import QWEN3_FAMILY
+    from mathanx.ml.helpers import (
+        load_experiment as _load_experiment_qwen3,
+        run_experiment as _run_experiment_qwen3,
+    )
+
+    qwen3_mask = X["Model"].isin(QWEN3_FAMILY)
+    X_qwen3 = X[qwen3_mask].reset_index(drop=True)
+    y_qwen3 = y[qwen3_mask].reset_index(drop=True)
+
+    _cache_dir = _Path("models/no_model_qwen3_family")
+    if _cache_dir.exists():
+        _result_qwen3 = _load_experiment_qwen3(_cache_dir)
+    else:
+        _result_qwen3 = _run_experiment_qwen3(X_qwen3, y_qwen3, model_specs_no_model, random_state=RANDOM_STATE)
+
+    model_summary_df_qwen3 = _result_qwen3.model_summary
+    best_params_by_model_qwen3 = _result_qwen3.best_params_by_model
+    best_model_name_qwen3 = _result_qwen3.best_model_name
+    permutation_importance_df_qwen3 = _result_qwen3.permutation_importance
+    return (
+        X_qwen3,
+        best_model_name_qwen3,
+        best_params_by_model_qwen3,
+        model_summary_df_qwen3,
+        permutation_importance_df_qwen3,
+        y_qwen3,
+    )
+
+
+@app.cell
+def _(model_summary_df_qwen3):
+    model_summary_df_qwen3
+    return
+
+
+@app.cell
+def _(permutation_importance_df_qwen3):
+    print(permutation_importance_df_qwen3)
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## 11e. SHAP explainability for Qwen3 family
+
+    Explain the best Qwen3-family model with SHAP.
+    """)
+    return
+
+
+@app.cell
+def _(SHAP_SAMPLE_SIZE, TREE_MODEL_NAMES):
+    SHAP_SAMPLE_SIZE_QWEN3 = SHAP_SAMPLE_SIZE
+    SHAP_RANDOM_STATE_QWEN3 = 42
+    TREE_MODEL_NAMES_QWEN3 = TREE_MODEL_NAMES
+    return (
+        SHAP_RANDOM_STATE_QWEN3,
+        SHAP_SAMPLE_SIZE_QWEN3,
+        TREE_MODEL_NAMES_QWEN3,
+    )
+
+
+@app.cell
+def _(
+    SHAP_RANDOM_STATE_QWEN3,
+    SHAP_SAMPLE_SIZE_QWEN3,
+    TREE_MODEL_NAMES_QWEN3,
+    X_qwen3,
+    best_model_name_qwen3,
+    best_params_by_model_qwen3,
+    model_specs_no_model,
+    model_summary_df_qwen3,
+    y_qwen3,
+):
+    from mathanx.ml.helpers import run_shap_analysis as _run_shap_analysis
+
+    shap_values_qwen3, shap_model_name_qwen3 = _run_shap_analysis(
+        X_qwen3, y_qwen3, model_specs_no_model, best_model_name_qwen3,
+        best_params_by_model_qwen3, model_summary_df_qwen3,
+        TREE_MODEL_NAMES_QWEN3,
+        shap_sample_size=SHAP_SAMPLE_SIZE_QWEN3,
+        shap_random_state=SHAP_RANDOM_STATE_QWEN3,
+    )
+    return shap_model_name_qwen3, shap_values_qwen3
+
+
+@app.cell
+def _(FIG_PATH, shap_model_name_qwen3, shap_values_qwen3):
+    from mathanx.ml.helpers import plot_shap_beeswarm as _plot_shap_beeswarm
+
+    _fig = _plot_shap_beeswarm(shap_values_qwen3, f"SHAP beeswarm for {shap_model_name_qwen3} (Qwen3 family, without Model)")
+    _fig.savefig(FIG_PATH / "beeswarm_no_model_qwen3_family.pdf", format="pdf")
+    _fig.savefig(FIG_PATH / "beeswarm_no_model_qwen3_family.png", format="png")
+    _fig
+    return
+
+
+@app.cell
+def _(shap_model_name_qwen3, shap_values_qwen3):
+    from mathanx.ml.helpers import plot_shap_bar as _plot_shap_bar
+
+    _plot_shap_bar(shap_values_qwen3, f"Global SHAP importance for {shap_model_name_qwen3} (Qwen3 family, without Model)")
     return
 
 
