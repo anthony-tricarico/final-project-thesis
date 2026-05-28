@@ -700,6 +700,203 @@ def _(shap_model_name, shap_values):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
+    ## 10b. SHAP explainability for all features + confidence_scaled
+
+    Use SHAP beeswarm and global importance plots on the best tree-based model, or on the best tree fallback when the overall winner is linear.
+    """)
+    return
+
+
+@app.cell
+def _():
+    SHAP_RANDOM_STATE_ALL_FEATURES_CS = 42
+    return (SHAP_RANDOM_STATE_ALL_FEATURES_CS,)
+
+
+@app.cell
+def _(LEAKAGE_COLS, RANDOM_STATE, TARGET, ml_df, pd):
+    from pathlib import Path as _Path
+
+    from mathanx.ml.helpers import (
+        build_linear_pipeline as _build_linear_pipeline,
+        build_tree_pipeline as _build_tree_pipeline,
+        classify_columns as _classify_columns,
+        load_experiment as _load_experiment_all_features_cs,
+        make_model_specs as _make_model_specs_all_features_cs,
+        run_experiment as _run_experiment_all_features_cs,
+    )
+
+    _feature_cols = [
+        c for c in ml_df.columns
+        if c not in (LEAKAGE_COLS - {"confidence_scaled"})
+        and c not in {TARGET, "education_vs_parent_mean_gap"}
+    ]
+    X_all_features_confidence_scaled = ml_df.loc[:, _feature_cols].copy()
+    y_all_features_confidence_scaled = ml_df[TARGET].copy()
+
+    _col_types = _classify_columns(X_all_features_confidence_scaled)
+    _numeric_features = _col_types["numeric_features"]
+    _nominal_features = _col_types["nominal_features"]
+    _tree_nominal_features = _col_types["tree_nominal_features"]
+
+    _build_linear = lambda m: _build_linear_pipeline(m, _numeric_features, _nominal_features)
+    _build_tree = lambda m: _build_tree_pipeline(m, _numeric_features, _tree_nominal_features)
+    model_specs_all_features_confidence_scaled = _make_model_specs_all_features_cs(
+        _build_linear,
+        _build_tree,
+        random_state=RANDOM_STATE,
+    )
+
+    _cache_dir = _Path("models/all_features_with_confidence_scaled")
+    if _cache_dir.exists():
+        _result = _load_experiment_all_features_cs(_cache_dir)
+    else:
+        _result = _run_experiment_all_features_cs(
+            X_all_features_confidence_scaled,
+            y_all_features_confidence_scaled,
+            model_specs_all_features_confidence_scaled,
+            random_state=RANDOM_STATE,
+        )
+
+    model_summary_df_all_features_confidence_scaled = _result.model_summary
+    best_params_by_model_all_features_confidence_scaled = _result.best_params_by_model
+    best_model_name_all_features_confidence_scaled = _result.best_model_name
+    best_model_pipeline_all_features_confidence_scaled = _result.final_estimator
+    tuned_cv_results_df_all_features_confidence_scaled = _result.tuned_cv_results
+    permutation_importance_df_all_features_confidence_scaled = _result.permutation_importance
+    top_permutation_importance_df_all_features_confidence_scaled = permutation_importance_df_all_features_confidence_scaled.head(20)
+    best_params_summary_df_all_features_confidence_scaled = pd.DataFrame(_result.best_params_summary_rows).sort_values("model")
+    return (
+        X_all_features_confidence_scaled,
+        best_model_name_all_features_confidence_scaled,
+        best_model_pipeline_all_features_confidence_scaled,
+        best_params_by_model_all_features_confidence_scaled,
+        best_params_summary_df_all_features_confidence_scaled,
+        model_specs_all_features_confidence_scaled,
+        model_summary_df_all_features_confidence_scaled,
+        top_permutation_importance_df_all_features_confidence_scaled,
+        tuned_cv_results_df_all_features_confidence_scaled,
+        y_all_features_confidence_scaled,
+    )
+
+
+@app.cell
+def _(model_summary_df_all_features_confidence_scaled):
+    model_summary_df_all_features_confidence_scaled
+    return
+
+
+@app.cell
+def _(best_params_summary_df_all_features_confidence_scaled):
+    best_params_summary_df_all_features_confidence_scaled
+    return
+
+
+@app.cell
+def _(
+    SHAP_RANDOM_STATE_ALL_FEATURES_CS,
+    SHAP_SAMPLE_SIZE,
+    TREE_MODEL_NAMES,
+    X_all_features_confidence_scaled,
+    best_model_name_all_features_confidence_scaled,
+    best_params_by_model_all_features_confidence_scaled,
+    model_specs_all_features_confidence_scaled,
+    tuned_cv_results_df_all_features_confidence_scaled,
+    y_all_features_confidence_scaled,
+):
+    from mathanx.ml.helpers import run_shap_analysis as _run_shap_analysis
+
+    shap_values_all_features_confidence_scaled, shap_model_name_all_features_confidence_scaled = _run_shap_analysis(
+        X_all_features_confidence_scaled,
+        y_all_features_confidence_scaled,
+        model_specs_all_features_confidence_scaled,
+        best_model_name_all_features_confidence_scaled,
+        best_params_by_model_all_features_confidence_scaled,
+        tuned_cv_results_df_all_features_confidence_scaled,
+        TREE_MODEL_NAMES,
+        shap_sample_size=SHAP_SAMPLE_SIZE,
+        shap_random_state=SHAP_RANDOM_STATE_ALL_FEATURES_CS,
+    )
+    return shap_model_name_all_features_confidence_scaled, shap_values_all_features_confidence_scaled
+
+
+@app.cell
+def _(shap_values_all_features_confidence_scaled):
+    shap_values_all_features_confidence_scaled.feature_names
+    return
+
+
+@app.cell
+def _(FIG_PATH, shap, shap_model_name_all_features_confidence_scaled, shap_values_all_features_confidence_scaled):
+    from mathanx.ml.helpers import plot_shap_beeswarm as _plot_shap_beeswarm
+
+    _indices = [
+        i
+        for i, name in enumerate(shap_values_all_features_confidence_scaled.feature_names)
+        if name != "Model"
+    ]
+    shap_values_filtered_all_features_confidence_scaled = shap.Explanation(
+        values=shap_values_all_features_confidence_scaled.values[:, _indices],
+        base_values=shap_values_all_features_confidence_scaled.base_values,
+        data=(
+            shap_values_all_features_confidence_scaled.data[:, _indices]
+            if shap_values_all_features_confidence_scaled.data is not None
+            else None
+        ),
+        feature_names=[shap_values_all_features_confidence_scaled.feature_names[i] for i in _indices],
+    )
+
+    _fig = _plot_shap_beeswarm(
+        shap_values_filtered_all_features_confidence_scaled,
+        f"SHAP beeswarm for {shap_model_name_all_features_confidence_scaled} (All predictors + confidence_scaled, model not plotted)",
+    )
+
+    _fig.savefig(FIG_PATH / "beeswarm_all_predictors_confidence_scaled_model_excluded.pdf", format="pdf")
+    _fig.savefig(FIG_PATH / "beeswarm_all_predictors_confidence_scaled_model_excluded.png", format="png")
+    _fig
+    return (shap_values_filtered_all_features_confidence_scaled,)
+
+
+@app.cell
+def _(shap_model_name_all_features_confidence_scaled, shap_values_filtered_all_features_confidence_scaled):
+    from mathanx.ml.helpers import plot_shap_bar as _plot_shap_bar
+
+    _plot_shap_bar(
+        shap_values_filtered_all_features_confidence_scaled,
+        f"Global SHAP importance for {shap_model_name_all_features_confidence_scaled} (without Model)",
+    )
+    return
+
+
+@app.cell
+def _(FIG_PATH, shap_model_name_all_features_confidence_scaled, shap_values_all_features_confidence_scaled):
+    from mathanx.ml.helpers import plot_shap_beeswarm as _plot_shap_beeswarm
+
+    _fig = _plot_shap_beeswarm(
+        shap_values_all_features_confidence_scaled,
+        f"SHAP beeswarm for {shap_model_name_all_features_confidence_scaled}",
+    )
+
+    _fig.savefig(FIG_PATH / "beeswarm_all_predictors_confidence_scaled.pdf", format="pdf")
+    _fig.savefig(FIG_PATH / "beeswarm_all_predictors_confidence_scaled.png", format="png")
+    _fig
+    return
+
+
+@app.cell
+def _(shap_model_name_all_features_confidence_scaled, shap_values_all_features_confidence_scaled):
+    from mathanx.ml.helpers import plot_shap_bar as _plot_shap_bar
+
+    _plot_shap_bar(
+        shap_values_all_features_confidence_scaled,
+        f"Global SHAP importance for {shap_model_name_all_features_confidence_scaled}",
+    )
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
     ## Without Model feature
 
     Since the model feature seems to be explaining a lot of the variance, leaving almost no explanatory power to all other features, we can try to refit the models using the same methodology but excluding it from the pool of features.

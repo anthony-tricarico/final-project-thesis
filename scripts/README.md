@@ -6,7 +6,7 @@ artifacts so the notebook can skip retraining on every run.
 ## Quick start
 
 ```bash
-# Full run — all five experiments on complete dataset
+# Full run — all six experiments on complete dataset
 uv run python scripts/train_models.py
 ```
 
@@ -17,7 +17,7 @@ them instead of re-running nested cross-validation.
 
 | Flag | Description |
 |------|-------------|
-| _(none)_ | Run all 5 experiments on the full dataset. |
+| _(none)_ | Run all 6 experiments on the full dataset. |
 | `--exclude-top-performers` | Remove `TOP_PERFORMERS` rows; appends `_no_top` to experiment dirs. |
 | `--model-name NAME` | Filter to a single model (exact match); appends `_{slug}` to dirs. |
 | `--experiments` / `-e` | Space-separated subset of experiments to run (see below). |
@@ -48,6 +48,7 @@ Valid experiment names:
 | `all_features` | All 35 features including `Model`. |
 | `no_model` | Same features, `Model` column excluded. |
 | `five_predictors` | 5-best-predictors baseline. |
+| `all_features_with_confidence_scaled` | All features, with `confidence_scaled` treated as non-leakage only for this experiment. |
 | `pca_predictors` | Psychometric scores replaced by 2 PCA components, `Model` excluded. |
 | `pca_with_model` | Psychometric scores replaced by 2 PCA components, `Model` included. |
 
@@ -102,7 +103,7 @@ Add a dict to the `experiments` list in `train_models.py`. Both `base_name`
 }
 ```
 
-Also add `"only_demographics"` to `EXPERIMENT_CHOICES` so `--experiments`
+Also add the experiment's `base_name` to `EXPERIMENT_CHOICES` so `--experiments`
 accepts it.
 
 ## Adding new models

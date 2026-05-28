@@ -7,7 +7,7 @@ Usage:
     uv run python scripts/train_models.py --experiments all_features no_model
     uv run python scripts/train_models.py -e all_features --model-name "Ministral 3B"
 
-Replicates the five experiments from notebooks/ml_models.py and saves
+Replicates the experiments from notebooks/ml_models.py and saves
 trained artifacts to models/{experiment_name}/ for later reuse.
 
 Filtering flags (composable):
@@ -16,9 +16,10 @@ Filtering flags (composable):
 
 Experiment selection:
   --experiments / -e         Space-separated list of experiment names to run
-                             (default: all five). Choices: all_features,
-                             no_model, five_predictors, pca_predictors,
-                             pca_with_model.
+                              (default: all six). Choices: all_features,
+                              no_model, five_predictors,
+                              all_features_with_confidence_scaled,
+                              pca_predictors, pca_with_model.
 """
 
 from __future__ import annotations
@@ -71,6 +72,16 @@ def _make_five_predictor_specs(random_state):
     )
 
 
+def _feature_cols_without_leakage(df, *, allowed_leakage: set[str] | None = None):
+    leakage_cols = set(LEAKAGE_COLS)
+    if allowed_leakage:
+        leakage_cols -= allowed_leakage
+    return [
+        c for c in df.columns
+        if c not in leakage_cols and c not in {TARGET, "education_vs_parent_mean_gap"}
+    ]
+
+
 def _prepare_pca_data(df, feature_cols):
     _pca_data = joblib.load(PCA_TRANSFORM_PATH)
     _pc_scores = _pca_data["pca"].transform(
@@ -86,6 +97,7 @@ def _prepare_pca_data(df, feature_cols):
 
 EXPERIMENT_CHOICES = [
     "all_features",
+    "all_features_with_confidence_scaled",
     "no_model",
     "five_predictors",
     "pca_predictors",
@@ -105,7 +117,7 @@ def main():
         nargs="+",
         choices=EXPERIMENT_CHOICES,
         default=None,
-        help="Experiment(s) to run (default: all five)",
+        help="Experiment(s) to run (default: all six)",
     )
     parser.add_argument(
         "--model-name",
@@ -145,14 +157,20 @@ def main():
         print(f"  Filtered to model '{args.model_name}': "
               f"{n_before} -> {len(ml_df)} rows")
 
-    feature_cols = [
-        c for c in ml_df.columns
-        if c not in LEAKAGE_COLS and c not in {TARGET, "education_vs_parent_mean_gap"}
-    ]
+    feature_cols = _feature_cols_without_leakage(ml_df)
     col_types = classify_columns(ml_df.loc[:, feature_cols])
     numeric_features = col_types["numeric_features"]
     nominal_features = col_types["nominal_features"]
     tree_nominal_features = col_types["tree_nominal_features"]
+
+    feature_cols_with_confidence_scaled = _feature_cols_without_leakage(
+        ml_df,
+        allowed_leakage={"confidence_scaled"},
+    )
+    col_types_with_confidence_scaled = classify_columns(ml_df.loc[:, feature_cols_with_confidence_scaled])
+    numeric_features_with_confidence_scaled = col_types_with_confidence_scaled["numeric_features"]
+    nominal_features_with_confidence_scaled = col_types_with_confidence_scaled["nominal_features"]
+    tree_nominal_features_with_confidence_scaled = col_types_with_confidence_scaled["tree_nominal_features"]
 
     print(
         f"  Features: {len(feature_cols)} "
@@ -196,6 +214,19 @@ def main():
                 df[TARGET].copy(),
             ),
             "build_specs": lambda: _make_five_predictor_specs(RANDOM_STATE),
+        },
+        {
+            "base_name": "all_features_with_confidence_scaled",
+            "name": f"all_features_with_confidence_scaled{suffix}",
+            "get_xy": lambda df: (
+                df.loc[:, feature_cols_with_confidence_scaled].copy(),
+                df[TARGET].copy(),
+            ),
+            "build_specs": lambda: make_model_specs(
+                lambda m: build_linear_pipeline(m, numeric_features_with_confidence_scaled, nominal_features_with_confidence_scaled),
+                lambda m: build_tree_pipeline(m, numeric_features_with_confidence_scaled, tree_nominal_features_with_confidence_scaled),
+                random_state=RANDOM_STATE,
+            ),
         },
         {
             "base_name": "pca_predictors",
