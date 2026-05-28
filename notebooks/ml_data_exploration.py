@@ -936,7 +936,7 @@ def _(mo):
 
 
 @app.cell
-def _(FIG_PATH, ml_df, np, plt, psych_cols, sns):
+def _(FIG_PATH, ml_df, np, plt, psych_cols):
     _fig, _axes = plt.subplots(2, 2, figsize=(16, 10))
     _axes = _axes.flatten()
 
@@ -1589,6 +1589,31 @@ def _(FIG_PATH, TARGET, ml_df_filtered, plt, psych_cols, sns):
         _g.fig.suptitle(f"{_col} vs. Accuracy — Faceted by Model", fontsize=13)
         _g.savefig(FIG_PATH / f"per_model_facet_{_col}.pdf", format="pdf")
         _g.savefig(FIG_PATH / f"per_model_facet_{_col}.png", format="png")
+        plt.show()
+    return
+
+
+@app.cell
+def _(FIG_PATH, TARGET, ml_df, plt, psych_cols, sns):
+    for _col in psych_cols:
+        _g = sns.lmplot(
+            data=ml_df,
+            x=_col,
+            y=TARGET,
+            col="Model",
+            col_wrap=4,
+            scatter_kws={"alpha": 0.3, "s": 8, "color": "steelblue"},
+            line_kws={"color": "red", "linewidth": 1},
+            lowess=False,
+            height=2.5,
+            aspect=1.1,
+            sharex=True,
+            sharey=True,
+        )
+        _g.fig.subplots_adjust(top=0.9)
+        _g.fig.suptitle(f"{_col} vs. Accuracy — Faceted by Model", fontsize=13)
+        _g.savefig(FIG_PATH / f"per_model_facet_all_models_{_col}.pdf", format="pdf")
+        _g.savefig(FIG_PATH / f"per_model_facet_all_models_{_col}.png", format="png")
         plt.show()
     return
 

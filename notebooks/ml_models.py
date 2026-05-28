@@ -678,10 +678,14 @@ def _(shap_model_name, shap_values_filtered):
 
 
 @app.cell
-def _(shap_model_name, shap_values):
+def _(FIG_PATH, shap_model_name, shap_values):
     from mathanx.ml.helpers import plot_shap_beeswarm as _plot_shap_beeswarm
 
-    _plot_shap_beeswarm(shap_values, f"SHAP beeswarm for {shap_model_name}")
+    _fig = _plot_shap_beeswarm(shap_values, f"SHAP beeswarm for {shap_model_name}")
+
+    _fig.savefig(FIG_PATH / "beeswarm_all_predictors.pdf", format="pdf")
+    _fig.savefig(FIG_PATH / "beeswarm_all_predictors.png", format="png")
+    _fig
     return
 
 

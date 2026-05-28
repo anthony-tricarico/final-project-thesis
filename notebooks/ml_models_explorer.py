@@ -127,6 +127,7 @@ def _(
         "all_features",
         "no_model",
         "five_predictors",
+        "five_predictors_with_confidence_scaled",
         "pca_predictors",
         "pca_with_model",
     ]
@@ -175,6 +176,11 @@ def _(
             if c not in LEAKAGE_COLS
             and c not in {TARGET, "education_vs_parent_mean_gap"}
         ]
+        _feature_cols_with_confidence_scaled = [
+            c for c in _ml_df.columns
+            if c not in (LEAKAGE_COLS - {"confidence_scaled"})
+            and c not in {TARGET, "education_vs_parent_mean_gap"}
+        ]
         dataset_info = f"{len(_ml_df)} rows"
 
         if base_name == "five_predictors":
@@ -183,6 +189,18 @@ def _(
             model_specs = make_model_specs(
                 lambda m: Pipeline([("scale", StandardScaler()), ("model", m)]),
                 lambda m: Pipeline([("model", m)]),
+                random_state=RANDOM_STATE,
+            )
+        elif base_name == "five_predictors_with_confidence_scaled":
+            X = _ml_df.loc[:, _feature_cols_with_confidence_scaled].copy()
+            y = _ml_df[TARGET].copy()
+            _col_types = classify_columns(X)
+            _num_f = _col_types["numeric_features"]
+            _nom_f = _col_types["nominal_features"]
+            _tree_f = _col_types["tree_nominal_features"]
+            model_specs = make_model_specs(
+                lambda m: build_linear_pipeline(m, _num_f, _nom_f),
+                lambda m: build_tree_pipeline(m, _num_f, _tree_f),
                 random_state=RANDOM_STATE,
             )
         elif base_name in ("pca_predictors", "pca_with_model"):
@@ -367,8 +385,8 @@ def _(
         shap_values = None
         shap_model_name = None
         shap_values_filtered = None
-    else:
-        _model_candidates = (
+        else:
+            _model_candidates = (
             tuned_cv_results_df
             if tuned_cv_results_df is not None
             else model_summary_df
@@ -385,7 +403,7 @@ def _(
             pipeline=best_model_pipeline,
             shap_sample_size=1000,
             shap_random_state=42,
-            check_linear=(base_name == "five_predictors"),
+            check_linear=(base_name in ("five_predictors", "five_predictors_with_confidence_scaled")),
         )
 
         _indices = [
