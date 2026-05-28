@@ -14,7 +14,7 @@ LEAKAGE_COLS: set[str] = {
     "run_id",
     "accuracy",
     "confidence",
-    "confidence_scaled",
+    # "confidence_scaled", # include confidence scaled for every model
     "delta_confidence",
     "total_correct",
     "n_observations",
