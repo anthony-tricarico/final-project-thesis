@@ -57,10 +57,12 @@ def _():
     from scipy.stats import gaussian_kde
 
     from mathanx.constants import FOLDER_NAME_MAPPING
+    from mathanx.ml.config import FIG_PATH
 
     color_human = '#648fff'
     color_llm = '#fe6100'
     return (
+        FIG_PATH,
         FOLDER_NAME_MAPPING,
         Patch,
         Path,
@@ -369,6 +371,145 @@ def _(create_custom_ridgeline, df_viz_anxiety):
 def _(create_custom_ridgeline, df_viz_self_efficacy):
     create_custom_ridgeline(df_viz_self_efficacy, target_scale="mseaq", scale_col="scale",
                             model_col="Model", mode_col="mode", score_col="sum_of_scores")
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## Arranging by human mean
+    """)
+    return
+
+
+@app.cell
+def _(Patch, Path, color_human, color_llm, gaussian_kde, np, plt):
+    def create_custom_ridgeline_sorted(
+            df,
+            target_scale,
+            scale_col="scale",
+            model_col="Model",
+            mode_col="mode",
+            score_col="rating",
+            save_path=None,
+            custom_name=None):
+        """
+        Creates a clean, overlapping ridgeline plot on a single axis using KDEs,
+        filtered to show only data for a specific scale.
+        Models are ordered by the mean of their human distribution (lowest to highest).
+        """
+        # Filter the dataframe for the target scale
+        df_filtered = df[df[scale_col] == target_scale].copy()
+        if df_filtered.empty:
+            print(f"Warning: No data found for scale '{
+                  target_scale}'. Check your spelling or dataframe.")
+            return
+
+        # --- Sort models by mean of human distribution (lowest to highest) ---
+        models_unsorted = df_filtered[model_col].unique()
+        human_means = {}
+        for model in models_unsorted:
+            human_data = df_filtered[
+                (df_filtered[model_col] == model) &
+                (df_filtered[mode_col].str.lower() == "human")
+            ][score_col].dropna().values
+            human_means[model] = np.mean(human_data) if len(human_data) > 0 else -np.inf
+        models = sorted(models_unsorted, key=lambda m: human_means[m])
+
+        # Setup and configurations
+        n_models = len(models)
+        # SPACING and HEIGHT_SCALE can be used to control how much the distributions overlap
+        SPACING = 0.6
+        HEIGHT_SCALE = 1.0
+        fig, ax = plt.subplots(figsize=(12, 6))
+        # Define a smooth x-axis range based on your filtered data's min/max
+        x_min, x_max = df_filtered[score_col].min(), df_filtered[score_col].max()
+        x_smooth = np.linspace(x_min - 0.5, x_max + 0.5, 500)
+        # Iterate and plot each model on the same axis
+        for i, model in enumerate(models):
+            base = i * SPACING
+            # z-order: lower rows are drawn last so they overlap the rows behind them
+            z_fill = n_models - i
+            z_line = z_fill + 0.1
+            # --- HUMAN MODE (Blue) ---
+            human_data = df_filtered[(df_filtered[model_col] == model) & (
+                df_filtered[mode_col].str.lower() == "human")][score_col].dropna().values
+            # Ensure we have enough variance to compute a KDE
+            if len(human_data) > 1 and np.var(human_data) > 0:
+                kde_human = gaussian_kde(human_data, bw_method=0.3)
+                y_human = kde_human(x_smooth)
+                y_human = (y_human / y_human.max()) * HEIGHT_SCALE
+                ax.fill_between(x_smooth, base, base + y_human,
+                                color=color_human, alpha=0.85, zorder=z_fill, linewidth=0)
+                ax.plot(x_smooth, base + y_human, color="black",
+                        linewidth=1, zorder=z_line)
+            # --- LLM MODE (Orange) ---
+            llm_data = df_filtered[(df_filtered[model_col] == model) & (
+                df_filtered[mode_col].str.lower() == "llm")][score_col].dropna().values
+            if len(llm_data) > 1 and np.var(llm_data) > 0:
+                kde_llm = gaussian_kde(llm_data, bw_method=0.3)
+                y_llm = kde_llm(x_smooth)
+                y_llm = (y_llm / y_llm.max()) * HEIGHT_SCALE
+                ax.fill_between(x_smooth, base, base + y_llm, color=color_llm,
+                                alpha=0.85, zorder=z_fill - 0.05, linewidth=0)
+                ax.plot(x_smooth, base + y_llm, color="black",
+                        linewidth=1, zorder=z_line)
+        # Axis formatting
+        ax.set_yticks(np.arange(n_models) * SPACING)
+        ax.set_yticklabels(models, fontsize=14)
+        ax.set_xlabel("Score", fontsize=14)
+        # ax.set_ylabel("Models", fontsize=14)
+        ax.tick_params(axis='x', labelsize=14)
+        # Uncomment this to show title of the scale.
+        # ax.set_title(f"Ridgeline Distribution: {str(target_scale).upper()}", fontsize=14, fontweight="bold", pad=15)
+        # Remove the bulky borders for a cleaner look
+        ax.spines['top'].set_visible(False)
+        ax.spines['right'].set_visible(False)
+        ax.spines['left'].set_visible(False)
+        ax.tick_params(axis='y', length=0)
+        # Custom Legend
+        legend_handles = [
+            Patch(facecolor=color_human, edgecolor="black", label="Human"),
+            Patch(facecolor=color_llm, edgecolor="black", label="LLM")
+        ]
+        ax.legend(handles=legend_handles, loc="upper left",
+                  frameon=False, fontsize=14)
+        plt.tight_layout()
+        if save_path:
+            if custom_name:
+                path = Path(save_path).resolve().absolute()
+                plt.savefig(path.joinpath(str(custom_name) +
+                            "_joyplot.pdf"), format="pdf")
+        plt.show()
+
+    return (create_custom_ridgeline_sorted,)
+
+
+@app.cell
+def _(FIG_PATH, create_custom_ridgeline_sorted, df_viz):
+    create_custom_ridgeline_sorted(df_viz, target_scale="amas", scale_col="scale",
+                            model_col="Model", mode_col="mode", score_col="sum_of_scores", save_path=FIG_PATH, custom_name="amas_sorted")
+    return
+
+
+@app.cell
+def _(FIG_PATH, create_custom_ridgeline_sorted, df_viz):
+    create_custom_ridgeline_sorted(df_viz, target_scale="maes", scale_col="scale",
+                            model_col="Model", mode_col="mode", score_col="sum_of_scores", save_path=FIG_PATH, custom_name="mses_sorted")
+    return
+
+
+@app.cell
+def _(FIG_PATH, create_custom_ridgeline_sorted, df_viz_anxiety):
+    create_custom_ridgeline_sorted(df_viz_anxiety, target_scale="mseaq", scale_col="scale",
+                            model_col="Model", mode_col="mode", score_col="sum_of_scores", save_path=FIG_PATH, custom_name="mseaq_anx_sorted")
+    return
+
+
+@app.cell
+def _(FIG_PATH, create_custom_ridgeline_sorted, df_viz_self_efficacy):
+    create_custom_ridgeline_sorted(df_viz_self_efficacy, target_scale="mseaq", scale_col="scale",
+                            model_col="Model", mode_col="mode", score_col="sum_of_scores", save_path=FIG_PATH, custom_name="mseaq_se_sorted")
     return
 
 

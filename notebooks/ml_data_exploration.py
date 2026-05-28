@@ -898,6 +898,75 @@ def _(FIG_PATH, TARGET, ml_df, pearsonr, plt, psych_cols, sns):
     return
 
 
+@app.cell
+def _(FIG_PATH, TARGET, ml_df, pearsonr, plt, psych_cols, sns):
+    from mathanx.ml.config import TOP_PERFORMERS
+
+    _fig, _axes = plt.subplots(1, len(psych_cols), figsize=(14, 3.5))
+
+    for _idx, _col in enumerate(psych_cols):
+        _ax = _axes[_idx]
+        _data = ml_df[[_col, TARGET]][~(ml_df["Model"].isin(TOP_PERFORMERS))].dropna()
+        sns.regplot(
+            data=_data,
+            x=_col,
+            y=TARGET,
+            scatter_kws={"alpha": 0.1, "s": 6, "color": "steelblue"},
+            line_kws={"color": "red", "linewidth": 1.5},
+            ax=_ax,
+        )
+        _r, _ = pearsonr(_data[_col], _data[TARGET])
+        _ax.set_title(f"{_col} (r={_r:.3f})", fontsize=10)
+        _ax.set_xlabel("")
+
+    _fig.suptitle("Psychometric Scores vs. Accuracy", fontsize=13)
+    _fig.tight_layout()
+    _fig.savefig(FIG_PATH / "psychometric_vs_accuracy_no_top.pdf", format="pdf")
+    _fig.savefig(FIG_PATH / "psychometric_vs_accuracy_no_top.png", format="png")
+    plt.show()
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ### 10a. Psychometric Scores by Model
+    """)
+    return
+
+
+@app.cell
+def _(FIG_PATH, ml_df, np, plt, psych_cols):
+    _fig, _axes = plt.subplots(2, 2, figsize=(16, 10))
+    _axes = _axes.flatten()
+
+    for _idx, _col in enumerate(psych_cols):
+        _ax = _axes[_idx]
+        _stats = ml_df.groupby("Model")[_col].agg(["mean", "std", "count"])
+        _stats["ci"] = 1.96 * _stats["std"] / np.sqrt(_stats["count"])
+        _stats = _stats.sort_values("mean", ascending=False)
+
+        _models = _stats.index.tolist()
+        _means = _stats["mean"].values
+        _cis = _stats["ci"].values
+
+        _ax.bar(
+            range(len(_models)), _means, yerr=_cis, capsize=3,
+            color="steelblue", edgecolor="black", linewidth=0.5,
+        )
+        _ax.set_xticks(range(len(_models)))
+        _ax.set_xticklabels(_models, rotation=45, ha="right", fontsize=7)
+        _ax.set_ylabel(f"Mean {_col}")
+        _ax.set_title(f"{_col} by Model", fontsize=11)
+
+    _fig.suptitle("Psychometric Score Means by Model", fontsize=14, y=1.02)
+    _fig.tight_layout()
+    _fig.savefig(FIG_PATH / "psychometric_scores_by_model.pdf", format="pdf")
+    _fig.savefig(FIG_PATH / "psychometric_scores_by_model.png", format="png")
+    plt.show()
+    return
+
+
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
@@ -1525,6 +1594,31 @@ def _(FIG_PATH, TARGET, ml_df_filtered, plt, psych_cols, sns):
 
 
 @app.cell
+def _(FIG_PATH, TARGET, ml_df, plt, psych_cols, sns):
+    for _col in psych_cols:
+        _g = sns.lmplot(
+            data=ml_df,
+            x=_col,
+            y=TARGET,
+            col="Model",
+            col_wrap=4,
+            scatter_kws={"alpha": 0.3, "s": 8, "color": "steelblue"},
+            line_kws={"color": "red", "linewidth": 1},
+            lowess=False,
+            height=2.5,
+            aspect=1.1,
+            sharex=True,
+            sharey=True,
+        )
+        _g.fig.subplots_adjust(top=0.9)
+        _g.fig.suptitle(f"{_col} vs. Accuracy — Faceted by Model", fontsize=13)
+        _g.savefig(FIG_PATH / f"per_model_facet_all_models_{_col}.pdf", format="pdf")
+        _g.savefig(FIG_PATH / f"per_model_facet_all_models_{_col}.png", format="png")
+        plt.show()
+    return
+
+
+@app.cell
 def _(mo, pd, per_model_corr, psych_cols):
     _r_cols = [f"{c}_r" for c in psych_cols]
     _p_cols = [f"{c}_p" for c in psych_cols]
@@ -1936,7 +2030,7 @@ def _(FIG_PATH, X_scaled, loadings, pca, plt):
             _loadings_2d.loc[_var, "PC2"] * 1.1,
             _var, fontsize=9, color="red",
         )
-    
+
     _ax.axhline(y=0, color="gray", linewidth=0.5)
     _ax.axvline(x=0, color="gray", linewidth=0.5)
     _ax.set_xlim(-1.1, 1.1)

@@ -43,12 +43,14 @@ def _():
         MSESR_CORRECT_ANSWERS,
         MODEL_NAME_MAPPING,
     )
+    from mathanx.ml.config import FIG_PATH
 
     COLOR_PALETTE_1 = "#648fff"
     COLOR_PALETTE_2 = "#fe6100"
     return (
         Call4Schema,
         Dict,
+        FIG_PATH,
         List,
         MODEL_NAME_MAPPING,
         MSESR_CORRECT_ANSWERS,
@@ -411,16 +413,29 @@ def _(mo):
 
 @app.cell
 def _(Optional, Path, np, pd, plt):
+
+
     # ==========================================
     # Plotting Configuration & Function
     # ==========================================
     _COLOR_PALETTE_2 = "#785ef0"
     _COLOR_PALETTE_1 = "#ffb000"
 
-    def plot_accuracy_vs_confidence_custom_ci(data: pd.DataFrame, save_path: Optional[str] = None):
+    def plot_accuracy_vs_confidence_custom_ci(
+        data: pd.DataFrame, 
+        save_path: Optional[str] = None,
+        legend_loc: str = "upper left", 
+        bbox_to_anchor: tuple = (1.02, 1)
+    ):
         """
         Plots a grouped bar chart comparing accuracy and scaled confidence,
         where bars are side-by-side but have different widths.
+    
+        Parameters:
+        - data: The dataset containing model, accuracy, and confidence metrics.
+        - save_path: Directory path to save the SVG.
+        - legend_loc: The anchor point of the legend box (default: "upper left").
+        - bbox_to_anchor: The coordinates to place the anchor (default: (1.02, 1) places it outside on the right).
         """
         if data.empty:
             raise ValueError("The dataset passed is empty!")
@@ -453,7 +468,7 @@ def _(Optional, Path, np, pd, plt):
         # Plot Accuracy
         ax.bar(
             x_acc, agg_df["Accuracy"], 
-            width=width_acc,          
+            width=width_acc,           
             color=_COLOR_PALETTE_1, 
             edgecolor="black",
             linewidth=0.5,
@@ -481,16 +496,27 @@ def _(Optional, Path, np, pd, plt):
         ax.tick_params(axis='y', labelsize=13)
 
         ax.set_ylim(0, 1.05) 
-        ax.legend(title="", loc="upper right", bbox_to_anchor=(1, 1), frameon=True, fontsize=13)
+    
+        # ---------------------------------------------------------
+        # UPDATED: Use the passed parameters for legend positioning
+        # ---------------------------------------------------------
+        ax.legend(
+            title="", 
+            loc=legend_loc, 
+            bbox_to_anchor=bbox_to_anchor, 
+            frameon=True, 
+            fontsize=13
+        )
 
         plt.tight_layout()
 
         if save_path:
             path = Path(save_path).resolve().absolute()
             if not path.is_dir(): raise OSError("Given path is not a directory")
+            # bbox_inches="tight" is crucial here, as it ensures the external legend isn't cut off when saving
             plt.savefig(path.joinpath("accuracy_vs_confidence.svg"), format="svg", bbox_inches="tight")
 
-        plt.show()
+        return fig
 
     return (plot_accuracy_vs_confidence_custom_ci,)
 
@@ -526,14 +552,26 @@ def _(grouped_df_model_mode):
 
 
 @app.cell
-def _(grouped_df_model_mode_human, plot_accuracy_vs_confidence_custom_ci):
-    plot_accuracy_vs_confidence_custom_ci(grouped_df_model_mode_human)
+def _(
+    FIG_PATH,
+    grouped_df_model_mode_human,
+    plot_accuracy_vs_confidence_custom_ci,
+):
+    _fig = plot_accuracy_vs_confidence_custom_ci(grouped_df_model_mode_human)
+    _fig.savefig(FIG_PATH / "confidence_vs_accuracy_human.pdf")
+    _fig
     return
 
 
 @app.cell
-def _(grouped_df_model_mode_llm, plot_accuracy_vs_confidence_custom_ci):
-    plot_accuracy_vs_confidence_custom_ci(grouped_df_model_mode_llm)
+def _(
+    FIG_PATH,
+    grouped_df_model_mode_llm,
+    plot_accuracy_vs_confidence_custom_ci,
+):
+    _fig = plot_accuracy_vs_confidence_custom_ci(grouped_df_model_mode_llm)
+    _fig.savefig(FIG_PATH / "confidence_vs_accuracy_llm.pdf")
+    _fig
     return
 
 

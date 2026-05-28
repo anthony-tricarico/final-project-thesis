@@ -14,7 +14,7 @@ LEAKAGE_COLS: set[str] = {
     "run_id",
     "accuracy",
     "confidence",
-    "confidence_scaled",
+    # "confidence_scaled", # include confidence scaled for every model
     "delta_confidence",
     "total_correct",
     "n_observations",
@@ -54,4 +54,9 @@ PSYCH_SCORE_COLUMNS: list[str] = [
 PCA_COMPONENT_COLUMNS: list[str] = [
     "PC1",
     "PC2",
+]
+
+TOP_PERFORMERS: list[str] = [
+    "Grok 4.1 Fast (Reasoning)",
+    "DeepSeek Chat"
 ]
