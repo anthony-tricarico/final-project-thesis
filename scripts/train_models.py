@@ -4,6 +4,7 @@ Usage:
     uv run python scripts/train_models.py
     uv run python scripts/train_models.py --exclude-top-performers
     uv run python scripts/train_models.py --model-name "Grok 4.1 Fast (Reasoning)"
+    uv run python scripts/train_models.py --model-name "Ministral 14B (Reasoning)" "Anita 24B (Uncensored)"
     uv run python scripts/train_models.py --experiments all_features no_model
     uv run python scripts/train_models.py -e all_features --model-name "Ministral 3B"
 
@@ -12,7 +13,7 @@ trained artifacts to models/{experiment_name}/ for later reuse.
 
 Filtering flags (composable):
   --exclude-top-performers   Exclude TOP_PERFORMERS models from the dataset.
-  --model-name <name>        Only include data from a specific model.
+  --model-name <name>...     One or more model names to filter the dataset by.
 
 Experiment selection:
   --experiments / -e         Space-separated list of experiment names to run
@@ -36,6 +37,7 @@ from mathanx.ml.config import (
     DATASET_PATH,
     FIVE_FEATURE_COLUMNS,
     LEAKAGE_COLS,
+    MODEL_FAMILIES,
     PCA_COMPONENT_COLUMNS,
     PCA_TRANSFORM_PATH,
     PSYCH_SCORE_COLUMNS,
@@ -122,8 +124,9 @@ def main():
     parser.add_argument(
         "--model-name",
         type=str,
+        nargs="+",
         default=None,
-        help="Only include data from a specific model (e.g. 'Grok 4.1 Fast (Reasoning)')",
+        help="One or more model names to filter the dataset by (e.g. 'Grok 4.1 Fast (Reasoning)')",
     )
     args = parser.parse_args()
 
@@ -131,8 +134,21 @@ def main():
     if args.exclude_top_performers:
         suffix_parts.append("_no_top")
     if args.model_name:
-        slug = args.model_name.lower().replace(" ", "_").replace("(", "").replace(")", "").replace(".", "_")
-        suffix_parts.append(f"_{slug}")
+        model_set = frozenset(args.model_name)
+        matched = False
+        for family_name, family_models in MODEL_FAMILIES.items():
+            if model_set == frozenset(family_models):
+                suffix_parts.append(f"_{family_name}")
+                matched = True
+                break
+        if not matched:
+            if len(args.model_name) == 1:
+                name = args.model_name[0]
+                slug = name.lower().replace(" ", "_").replace("(", "").replace(")", "").replace(".", "_")
+                suffix_parts.append(f"_{slug}")
+            else:
+                slug = f"_{len(args.model_name)}_models"
+                suffix_parts.append(slug)
     suffix = "".join(suffix_parts)
 
     print("Loading dataset...")
@@ -147,14 +163,15 @@ def main():
 
     if args.model_name:
         available = sorted(ml_df["Model"].unique())
-        if args.model_name not in available:
+        missing = [m for m in args.model_name if m not in available]
+        if missing:
             raise ValueError(
-                f"Model '{args.model_name}' not found in dataset. "
+                f"Model(s) not found in dataset: {missing}. "
                 f"Available models: {available}"
             )
         n_before = len(ml_df)
-        ml_df = ml_df[ml_df["Model"] == args.model_name].reset_index(drop=True)
-        print(f"  Filtered to model '{args.model_name}': "
+        ml_df = ml_df[ml_df["Model"].isin(args.model_name)].reset_index(drop=True)
+        print(f"  Filtered to {len(args.model_name)} model(s): "
               f"{n_before} -> {len(ml_df)} rows")
 
     feature_cols = _feature_cols_without_leakage(ml_df)
