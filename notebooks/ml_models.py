@@ -1288,6 +1288,240 @@ def _(shap_model_name_qwen3, shap_values_qwen3):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
+    ## 11f. Best performers — no Model
+
+    Subset the dataset to only the best-performing models (Grok 4.1 Fast, DeepSeek Chat) and run the no-Model experiment to measure explanatory power for this elite set.
+    """)
+    return
+
+
+@app.cell
+def _(RANDOM_STATE, X, model_specs_no_model, y):
+    from pathlib import Path as _Path
+
+    from mathanx.ml.config import TOP_PERFORMERS as _TOP_PERFORMERS
+    from mathanx.ml.helpers import (
+        load_experiment as _load_experiment_best,
+        run_experiment as _run_experiment_best,
+    )
+
+    best_mask = X["Model"].isin(_TOP_PERFORMERS)
+    X_best_performers = X[best_mask].reset_index(drop=True)
+    y_best_performers = y[best_mask].reset_index(drop=True)
+
+    _cache_dir = _Path("models/no_model_best_performers")
+    if _cache_dir.exists():
+        _result_best = _load_experiment_best(_cache_dir)
+    else:
+        _result_best = _run_experiment_best(X_best_performers, y_best_performers, model_specs_no_model, random_state=RANDOM_STATE)
+
+    model_summary_df_best_performers = _result_best.model_summary
+    best_params_by_model_best_performers = _result_best.best_params_by_model
+    best_model_name_best_performers = _result_best.best_model_name
+    permutation_importance_df_best_performers = _result_best.permutation_importance
+    return (
+        X_best_performers,
+        best_model_name_best_performers,
+        best_params_by_model_best_performers,
+        model_summary_df_best_performers,
+        permutation_importance_df_best_performers,
+        y_best_performers,
+    )
+
+
+@app.cell
+def _(model_summary_df_best_performers):
+    model_summary_df_best_performers
+    return
+
+
+@app.cell
+def _(permutation_importance_df_best_performers):
+    print(permutation_importance_df_best_performers)
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## 11g. SHAP explainability for best performers
+
+    Explain the best best-performers model with SHAP.
+    """)
+    return
+
+
+@app.cell
+def _(SHAP_SAMPLE_SIZE, TREE_MODEL_NAMES):
+    SHAP_SAMPLE_SIZE_BEST = SHAP_SAMPLE_SIZE
+    SHAP_RANDOM_STATE_BEST = 42
+    TREE_MODEL_NAMES_BEST = TREE_MODEL_NAMES
+    return SHAP_RANDOM_STATE_BEST, SHAP_SAMPLE_SIZE_BEST, TREE_MODEL_NAMES_BEST
+
+
+@app.cell
+def _(
+    SHAP_RANDOM_STATE_BEST,
+    SHAP_SAMPLE_SIZE_BEST,
+    TREE_MODEL_NAMES_BEST,
+    X_best_performers,
+    best_model_name_best_performers,
+    best_params_by_model_best_performers,
+    model_specs_no_model,
+    model_summary_df_best_performers,
+    y_best_performers,
+):
+    from mathanx.ml.helpers import run_shap_analysis as _run_shap_analysis
+
+    shap_values_best_performers, shap_model_name_best_performers = _run_shap_analysis(
+        X_best_performers, y_best_performers, model_specs_no_model, best_model_name_best_performers,
+        best_params_by_model_best_performers, model_summary_df_best_performers,
+        TREE_MODEL_NAMES_BEST,
+        shap_sample_size=SHAP_SAMPLE_SIZE_BEST,
+        shap_random_state=SHAP_RANDOM_STATE_BEST,
+    )
+    return shap_model_name_best_performers, shap_values_best_performers
+
+
+@app.cell
+def _(FIG_PATH, shap_model_name_best_performers, shap_values_best_performers):
+    from mathanx.ml.helpers import plot_shap_beeswarm as _plot_shap_beeswarm
+
+    _fig = _plot_shap_beeswarm(shap_values_best_performers, f"SHAP beeswarm for {shap_model_name_best_performers} (best performers, without Model)")
+    _fig.savefig(FIG_PATH / "beeswarm_no_model_best_performers.pdf", format="pdf")
+    _fig.savefig(FIG_PATH / "beeswarm_no_model_best_performers.png", format="png")
+    _fig
+    return
+
+
+@app.cell
+def _(shap_model_name_best_performers, shap_values_best_performers):
+    from mathanx.ml.helpers import plot_shap_bar as _plot_shap_bar
+
+    _plot_shap_bar(shap_values_best_performers, f"Global SHAP importance for {shap_model_name_best_performers} (best performers, without Model)")
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## 11h. Misc models — no Model
+
+    Subset the dataset to only the remaining miscellaneous models (Qwen3.5 9B, Ministral 3B, Phi-4 (Reasoning+), Granite 4 Tiny) and run the no-Model experiment.
+    """)
+    return
+
+
+@app.cell
+def _(RANDOM_STATE, X, model_specs_no_model, y):
+    from pathlib import Path as _Path
+
+    from mathanx.ml.config import MISC_MODELS
+    from mathanx.ml.helpers import (
+        load_experiment as _load_experiment_misc,
+        run_experiment as _run_experiment_misc,
+    )
+
+    misc_mask = X["Model"].isin(MISC_MODELS)
+    X_misc_models = X[misc_mask].reset_index(drop=True)
+    y_misc_models = y[misc_mask].reset_index(drop=True)
+
+    _cache_dir = _Path("models/no_model_misc_models")
+    if _cache_dir.exists():
+        _result_misc = _load_experiment_misc(_cache_dir)
+    else:
+        _result_misc = _run_experiment_misc(X_misc_models, y_misc_models, model_specs_no_model, random_state=RANDOM_STATE)
+
+    model_summary_df_misc_models = _result_misc.model_summary
+    best_params_by_model_misc_models = _result_misc.best_params_by_model
+    best_model_name_misc_models = _result_misc.best_model_name
+    permutation_importance_df_misc_models = _result_misc.permutation_importance
+    return (
+        X_misc_models,
+        best_model_name_misc_models,
+        best_params_by_model_misc_models,
+        model_summary_df_misc_models,
+        permutation_importance_df_misc_models,
+        y_misc_models,
+    )
+
+
+@app.cell
+def _(model_summary_df_misc_models):
+    model_summary_df_misc_models
+    return
+
+
+@app.cell
+def _(permutation_importance_df_misc_models):
+    print(permutation_importance_df_misc_models)
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## 11i. SHAP explainability for misc models
+
+    Explain the best miscellaneous model with SHAP.
+    """)
+    return
+
+
+@app.cell
+def _(SHAP_SAMPLE_SIZE, TREE_MODEL_NAMES):
+    SHAP_SAMPLE_SIZE_MISC = SHAP_SAMPLE_SIZE
+    SHAP_RANDOM_STATE_MISC = 42
+    TREE_MODEL_NAMES_MISC = TREE_MODEL_NAMES
+    return SHAP_RANDOM_STATE_MISC, SHAP_SAMPLE_SIZE_MISC, TREE_MODEL_NAMES_MISC
+
+
+@app.cell
+def _(
+    SHAP_RANDOM_STATE_MISC,
+    SHAP_SAMPLE_SIZE_MISC,
+    TREE_MODEL_NAMES_MISC,
+    X_misc_models,
+    best_model_name_misc_models,
+    best_params_by_model_misc_models,
+    model_specs_no_model,
+    model_summary_df_misc_models,
+    y_misc_models,
+):
+    from mathanx.ml.helpers import run_shap_analysis as _run_shap_analysis
+
+    shap_values_misc_models, shap_model_name_misc_models = _run_shap_analysis(
+        X_misc_models, y_misc_models, model_specs_no_model, best_model_name_misc_models,
+        best_params_by_model_misc_models, model_summary_df_misc_models,
+        TREE_MODEL_NAMES_MISC,
+        shap_sample_size=SHAP_SAMPLE_SIZE_MISC,
+        shap_random_state=SHAP_RANDOM_STATE_MISC,
+    )
+    return shap_model_name_misc_models, shap_values_misc_models
+
+
+@app.cell
+def _(FIG_PATH, shap_model_name_misc_models, shap_values_misc_models):
+    from mathanx.ml.helpers import plot_shap_beeswarm as _plot_shap_beeswarm
+
+    _fig = _plot_shap_beeswarm(shap_values_misc_models, f"SHAP beeswarm for {shap_model_name_misc_models} (misc models, without Model)")
+    _fig.savefig(FIG_PATH / "beeswarm_no_model_misc_models.pdf", format="pdf")
+    _fig.savefig(FIG_PATH / "beeswarm_no_model_misc_models.png", format="png")
+    _fig
+    return
+
+
+@app.cell
+def _(shap_model_name_misc_models, shap_values_misc_models):
+    from mathanx.ml.helpers import plot_shap_bar as _plot_shap_bar
+
+    _plot_shap_bar(shap_values_misc_models, f"Global SHAP importance for {shap_model_name_misc_models} (misc models, without Model)")
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
     ## 12. Nested CV with five predictors
 
     Re-run the nested cross-validation using only `mseaq_anx`, `amas_score`, `maes_score`, `mseaq_se`, and `confidence_scaled`.

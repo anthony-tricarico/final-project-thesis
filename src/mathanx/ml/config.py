@@ -75,7 +75,16 @@ QWEN3_FAMILY: list[str] = [
     "Qwen3 4B",
 ]
 
+MISC_MODELS: list[str] = [
+    "Qwen3.5 9B",
+    "Ministral 3B",
+    "Phi-4 (Reasoning+)",
+    "Granite 4 Tiny",
+]
+
 MODEL_FAMILIES: dict[str, list[str]] = {
     "mistral_family": MISTRAL_FAMILY,
     "qwen3_family": QWEN3_FAMILY,
+    "best_performers": TOP_PERFORMERS,
+    "misc_models": MISC_MODELS,
 }

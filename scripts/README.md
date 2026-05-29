@@ -128,9 +128,41 @@ uv run python scripts/train_models.py -e no_model \
 | Best model | `xgboost` |
 | Best R² | 0.3055 |
 
-Both experiments exclude the `Model` column from features (via the `no_model`
+### Best performers
+
+```bash
+uv run python scripts/train_models.py -e no_model \
+    --model-name "Grok 4.1 Fast (Reasoning)" \
+                 "DeepSeek Chat"
+```
+
+| Detail | Value |
+|--------|-------|
+| Output dir | `models/no_model_best_performers/` |
+| Rows | 3,000 (2 models × 1,500) |
+| Best model | `random_forest` |
+| Best R² | 0.1646 |
+
+### Misc models
+
+```bash
+uv run python scripts/train_models.py -e no_model \
+    --model-name "Qwen3.5 9B" \
+                 "Ministral 3B" \
+                 "Phi-4 (Reasoning+)" \
+                 "Granite 4 Tiny"
+```
+
+| Detail | Value |
+|--------|-------|
+| Output dir | `models/no_model_misc_models/` |
+| Rows | 5,982 (4 models × ~1,500) |
+| Best model | `random_forest` |
+| Best R² | 0.2978 |
+
+All experiments exclude the `Model` column from features (via the `no_model`
 experiment), so the remaining predictors compete to explain accuracy variance
-_within_ the family. See `notebooks/ml_models.py` sections **11b–11e** for SHAP
+_within_ the family. See `notebooks/ml_models.py` sections **11b–11i** for SHAP
 explainability.
 
 ## Artifacts saved per experiment
