@@ -60,3 +60,31 @@ TOP_PERFORMERS: list[str] = [
     "Grok 4.1 Fast (Reasoning)",
     "DeepSeek Chat"
 ]
+
+MISTRAL_FAMILY: list[str] = [
+    "Ministral 14B (Reasoning)",
+    "Anita 24B (Uncensored)",
+    "Magistral Small",
+    "Mistral Small 4",
+    "Mistral Small 3.2",
+]
+
+QWEN3_FAMILY: list[str] = [
+    "Qwen3 4B (Thinking)",
+    "Qwen3 4B (Uncensored)",
+    "Qwen3 4B",
+]
+
+MISC_MODELS: list[str] = [
+    "Qwen3.5 9B",
+    "Ministral 3B",
+    "Phi-4 (Reasoning+)",
+    "Granite 4 Tiny",
+]
+
+MODEL_FAMILIES: dict[str, list[str]] = {
+    "mistral_family": MISTRAL_FAMILY,
+    "qwen3_family": QWEN3_FAMILY,
+    "best_performers": TOP_PERFORMERS,
+    "misc_models": MISC_MODELS,
+}

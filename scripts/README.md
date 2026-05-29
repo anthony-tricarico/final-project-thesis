@@ -19,7 +19,7 @@ them instead of re-running nested cross-validation.
 |------|-------------|
 | _(none)_ | Run all 6 experiments on the full dataset. |
 | `--exclude-top-performers` | Remove `TOP_PERFORMERS` rows; appends `_no_top` to experiment dirs. |
-| `--model-name NAME` | Filter to a single model (exact match); appends `_{slug}` to dirs. |
+| `--model-name NAME...` | Filter to one or more models (exact match); appends family slug or `_{N}_models` to dirs. |
 | `--experiments` / `-e` | Space-separated subset of experiments to run (see below). |
 
 All flags are composable. Filtering order: `--model-name` first, then
@@ -67,6 +67,103 @@ uv run python scripts/train_models.py -e all_features \
 ```
 
 Invalid model names raise `ValueError` listing available models.
+
+```bash
+# Filter to a subset of models (model family)
+uv run python scripts/train_models.py -e no_model \
+    --model-name "Ministral 14B (Reasoning)" \
+                 "Anita 24B (Uncensored)" \
+                 "Magistral Small" \
+                 "Mistral Small 4" \
+                 "Mistral Small 3.2"
+
+# Filter to Qwen3 family
+uv run python scripts/train_models.py -e no_model \
+    --model-name "Qwen3 4B (Thinking)" \
+                 "Qwen3 4B (Uncensored)" \
+                 "Qwen3 4B"
+```
+
+When the model names exactly match a known family (e.g. `MISTRAL_FAMILY` or
+`QWEN3_FAMILY` in `config.py`), the experiment directory gets a readable suffix
+like `no_model_mistral_family`. Otherwise, a generic `_{N}_models` suffix is
+used.
+
+## Model family experiments
+
+Run the `no_model` experiment on a predefined model family to measure
+explanatory power within an architecture family.
+
+### Mistral family
+
+```bash
+uv run python scripts/train_models.py -e no_model \
+    --model-name "Ministral 14B (Reasoning)" \
+                 "Anita 24B (Uncensored)" \
+                 "Magistral Small" \
+                 "Mistral Small 4" \
+                 "Mistral Small 3.2"
+```
+
+| Detail | Value |
+|--------|-------|
+| Output dir | `models/no_model_mistral_family/` |
+| Rows | 7,517 (5 models × ~1,500) |
+| Best model | `random_forest` |
+| Best R² | 0.0609 |
+
+### Qwen3 family
+
+```bash
+uv run python scripts/train_models.py -e no_model \
+    --model-name "Qwen3 4B (Thinking)" \
+                 "Qwen3 4B (Uncensored)" \
+                 "Qwen3 4B"
+```
+
+| Detail | Value |
+|--------|-------|
+| Output dir | `models/no_model_qwen3_family/` |
+| Rows | 4,499 (3 models × ~1,500) |
+| Best model | `xgboost` |
+| Best R² | 0.3055 |
+
+### Best performers
+
+```bash
+uv run python scripts/train_models.py -e no_model \
+    --model-name "Grok 4.1 Fast (Reasoning)" \
+                 "DeepSeek Chat"
+```
+
+| Detail | Value |
+|--------|-------|
+| Output dir | `models/no_model_best_performers/` |
+| Rows | 3,000 (2 models × 1,500) |
+| Best model | `random_forest` |
+| Best R² | 0.1646 |
+
+### Misc models
+
+```bash
+uv run python scripts/train_models.py -e no_model \
+    --model-name "Qwen3.5 9B" \
+                 "Ministral 3B" \
+                 "Phi-4 (Reasoning+)" \
+                 "Granite 4 Tiny"
+```
+
+| Detail | Value |
+|--------|-------|
+| Output dir | `models/no_model_misc_models/` |
+| Rows | 5,982 (4 models × ~1,500) |
+| Best model | `random_forest` |
+| Best R² | 0.2978 |
+
+All experiments exclude the `Model` column from features (via the `no_model`
+experiment), so the remaining predictors compete to explain accuracy variance
+_within_ the family. See `notebooks/ml_models.py` sections **11b–11i** for SHAP
+explainability.
 
 ## Artifacts saved per experiment
 
