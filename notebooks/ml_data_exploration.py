@@ -664,6 +664,43 @@ def _(FIG_PATH, TARGET, ml_df, pearsonr, plt, sns, target_pearson):
     return
 
 
+@app.cell
+def _(TARGET, ml_df, pearsonr, plt, sns, target_pearson):
+    _top_features = list(filter(lambda x: x == "confidence", target_pearson["feature"].tolist()))
+    print(_top_features)
+
+    _n_cols = 1
+    _n_rows = 1
+    _fig, _axes = plt.subplots(
+        _n_rows, _n_cols, figsize=(_n_cols * 3.2, _n_rows * 2.8)
+    )
+    # _axes = _axes.flatten()
+
+
+    _ax = _axes
+    _data = ml_df[["confidence", TARGET]].dropna()
+    sns.regplot(
+        data=_data,
+        x="confidence",
+        y=TARGET,
+        scatter_kws={"alpha": 0.15, "s": 8, "color": "steelblue"},
+        line_kws={"color": "red", "linewidth": 1.5},
+        lowess=False,
+        ax=_ax,
+    )
+    _r, _p = pearsonr(_data["confidence"], _data[TARGET])
+    _p_str = f"p={_p:.2e}" if _p < 0.001 else f"p={_p:.4f}"
+    _ax.set_title(f"{"confidence"}  (r={_r:.3f}, {_p_str})", fontsize=9)
+    _ax.set_xlabel("")
+
+    # _fig.suptitle("Top 8 Features vs. Accuracy (with OLS fit)", fontsize=13)
+    _fig.tight_layout()
+    # _fig.savefig(FIG_PATH / "top_features_vs_accuracy.pdf", format="pdf")
+    # _fig.savefig(FIG_PATH / "top_features_vs_accuracy.png", format="png")
+    plt.show()
+    return
+
+
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
