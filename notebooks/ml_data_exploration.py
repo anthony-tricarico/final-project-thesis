@@ -701,6 +701,63 @@ def _(TARGET, ml_df, pearsonr, plt, sns, target_pearson):
     return
 
 
+@app.cell
+def _(FIG_PATH, TARGET, ml_df, plt, sns):
+    _g = sns.lmplot(
+        data=ml_df,
+        x="confidence",
+        y=TARGET,
+        col="Model",
+        col_wrap=4,
+        scatter_kws={"alpha": 0.15, "s": 8, "color": "steelblue"},
+        line_kws={"color": "red", "linewidth": 1},
+        lowess=False,
+        height=2.5,
+        aspect=1.1,
+        sharex=True,
+        sharey=True,
+    )
+    _g.fig.subplots_adjust(top=0.9)
+    _g.fig.suptitle("Confidence vs Accuracy — Faceted by Model", fontsize=13)
+    _g.savefig(FIG_PATH / "confidence_vs_accuracy_by_model.pdf", format="pdf")
+    _g.savefig(FIG_PATH / "confidence_vs_accuracy_by_model.png", format="png")
+    plt.show()
+    return
+
+
+@app.cell
+def _(TARGET, ml_df, pd, spearmanr):
+    _rows = []
+    for _model in sorted(ml_df["Model"].unique()):
+        _sub = ml_df[ml_df["Model"] == _model]
+        _r, _p = spearmanr(_sub["confidence"], _sub[TARGET])
+        _rows.append(
+            {
+                "Model": _model,
+                "n": len(_sub),
+                "r": round(_r, 4),
+                "p": _p,
+                "sig": "***"
+                if _p < 0.001
+                else "**"
+                if _p < 0.01
+                else "*"
+                if _p < 0.05
+                else "ns",
+            }
+        )
+    results_corr_confidence_acc_model = pd.DataFrame(_rows)
+    results_corr_confidence_acc_model
+
+    return (results_corr_confidence_acc_model,)
+
+
+@app.cell
+def _(results_corr_confidence_acc_model):
+    print(results_corr_confidence_acc_model.to_latex(index=False, escape=True))
+    return
+
+
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
