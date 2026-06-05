@@ -748,7 +748,6 @@ def _(TARGET, ml_df, pd, spearmanr):
         )
     results_corr_confidence_acc_model = pd.DataFrame(_rows)
     results_corr_confidence_acc_model
-
     return (results_corr_confidence_acc_model,)
 
 
@@ -961,6 +960,61 @@ def _(FIG_PATH, plt, psych_corr, sns):
     _fig.tight_layout()
     _fig.savefig(FIG_PATH / "psychometric_correlation_heatmap.pdf", format="pdf")
     _fig.savefig(FIG_PATH / "psychometric_correlation_heatmap.png", format="png")
+    plt.show()
+    return
+
+
+@app.cell
+def _(FIG_PATH, TARGET, ml_df, pd, plt, psych_cols, sns, spearmanr):
+    _data = ml_df[psych_cols + [TARGET]].dropna()
+    _vars = psych_cols + [TARGET]
+
+    _rho = pd.DataFrame(index=_vars, columns=_vars, dtype=float)
+    _pval = pd.DataFrame(index=_vars, columns=_vars, dtype=float)
+
+    # Calculate correlations and p-values
+    for _c1 in _vars:
+        for _c2 in _vars:
+            _r, _p = spearmanr(_data[_c1], _data[_c2])
+            _rho.loc[_c1, _c2] = _r
+            _pval.loc[_c1, _c2] = _p
+
+    _annot = pd.DataFrame(index=_vars, columns=_vars, dtype=object)
+
+    # Format annotations: rho for lower triangle/diagonal, p-values for upper triangle
+    for _i, _c1 in enumerate(_vars):
+        for _j, _c2 in enumerate(_vars):
+            if _i >= _j:
+                _annot.loc[_c1, _c2] = f"{_rho.loc[_c1, _c2]:.3f}"
+            else:
+                _p = _pval.loc[_c1, _c2]
+                _stars = "***" if _p < 0.001 else "**" if _p < 0.01 else "*" if _p < 0.05 else ""
+                _p_str = "<0.001" if _p < 0.001 else f"{_p:.3f}"
+                _annot.loc[_c1, _c2] = f"{_p_str}{_stars}"
+
+    _fig, _ax = plt.subplots(figsize=(5, 4))
+
+    # Plot heatmap without the mask
+    sns.heatmap(
+        _rho,
+        annot=_annot,
+        fmt="",
+        cmap=sns.diverging_palette(250, 10, as_cmap=True),
+        vmin=-1,
+        vmax=1,
+        center=0,
+        square=True,
+        linewidths=0.5,
+        annot_kws={"size": 8},
+        ax=_ax,
+    )
+
+    _ax.set_title("Psychometric Score Correlations", fontsize=11)
+    _fig.tight_layout()
+
+    # Save and show
+    _fig.savefig(FIG_PATH / "psychometric_spearman_heatmap.pdf", format="pdf")
+    _fig.savefig(FIG_PATH / "psychometric_spearman_heatmap.png", format="png")
     plt.show()
     return
 
