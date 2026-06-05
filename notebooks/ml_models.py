@@ -854,7 +854,7 @@ def _(
 
     _fig = _plot_shap_beeswarm(
         shap_values_filtered_all_features_confidence_scaled,
-        f"SHAP beeswarm for {shap_model_name_all_features_confidence_scaled} (All predictors + confidence_scaled, model not plotted)",
+        f"SHAP beeswarm for {shap_model_name_all_features_confidence_scaled} (All predictors, model not plotted)",
     )
 
     _fig.savefig(FIG_PATH / "beeswarm_all_predictors_confidence_scaled_model_excluded.pdf", format="pdf")
