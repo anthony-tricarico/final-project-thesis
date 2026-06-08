@@ -86,6 +86,20 @@ def _(FOLDER_NAME_MAPPING, Path, pd):
 
 @app.cell
 def _(df):
+    # Check names of the psychometric scales
+
+    df["scale"].unique()
+    return
+
+
+@app.cell
+def _(df):
+    df.query("scale == 'mseaq'").isna().sum()
+    return
+
+
+@app.cell
+def _(df):
     ITEMS_TO_REVERSE = ["13", "14", "17", "22", "25", "27"]
     REVERSE_ITEMS_MAP = {
         "1": "5",
@@ -111,6 +125,12 @@ def _(df):
 
     new_df = map_if_mseaq(df)
     return (new_df,)
+
+
+@app.cell
+def _(new_df):
+    new_df.query("scale == 'mseaq'").isna().sum()
+    return
 
 
 @app.cell
@@ -347,6 +367,18 @@ def _(Patch, Path, color_human, color_llm, gaussian_kde, np, plt):
 
 
 @app.cell
+def _(df_viz):
+    df_viz.query("scale == 'mseaq'").isna().sum()
+    return
+
+
+@app.cell
+def _(df_viz):
+    df_viz.scale.unique()
+    return
+
+
+@app.cell
 def _(create_custom_ridgeline, df_viz):
     create_custom_ridgeline(df_viz, target_scale="amas", scale_col="scale",
                             model_col="Model", mode_col="mode", score_col="sum_of_scores")
@@ -361,15 +393,21 @@ def _(create_custom_ridgeline, df_viz):
 
 
 @app.cell
+def _(df_viz_anxiety):
+    df_viz_anxiety.scale
+    return
+
+
+@app.cell
 def _(create_custom_ridgeline, df_viz_anxiety):
-    create_custom_ridgeline(df_viz_anxiety, target_scale="mseaq", scale_col="scale",
+    create_custom_ridgeline(df_viz_anxiety, target_scale="mseaq_anx", scale_col="scale",
                             model_col="Model", mode_col="mode", score_col="sum_of_scores")
     return
 
 
 @app.cell
 def _(create_custom_ridgeline, df_viz_self_efficacy):
-    create_custom_ridgeline(df_viz_self_efficacy, target_scale="mseaq", scale_col="scale",
+    create_custom_ridgeline(df_viz_self_efficacy, target_scale="mseaq_se", scale_col="scale",
                             model_col="Model", mode_col="mode", score_col="sum_of_scores")
     return
 
@@ -501,14 +539,14 @@ def _(FIG_PATH, create_custom_ridgeline_sorted, df_viz):
 
 @app.cell
 def _(FIG_PATH, create_custom_ridgeline_sorted, df_viz_anxiety):
-    create_custom_ridgeline_sorted(df_viz_anxiety, target_scale="mseaq", scale_col="scale",
+    create_custom_ridgeline_sorted(df_viz_anxiety, target_scale="mseaq_anx", scale_col="scale",
                             model_col="Model", mode_col="mode", score_col="sum_of_scores", save_path=FIG_PATH, custom_name="mseaq_anx_sorted")
     return
 
 
 @app.cell
 def _(FIG_PATH, create_custom_ridgeline_sorted, df_viz_self_efficacy):
-    create_custom_ridgeline_sorted(df_viz_self_efficacy, target_scale="mseaq", scale_col="scale",
+    create_custom_ridgeline_sorted(df_viz_self_efficacy, target_scale="mseaq_se", scale_col="scale",
                             model_col="Model", mode_col="mode", score_col="sum_of_scores", save_path=FIG_PATH, custom_name="mseaq_se_sorted")
     return
 
