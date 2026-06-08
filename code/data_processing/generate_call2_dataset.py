@@ -3,7 +3,7 @@ This script creates the supporting dataset for the validation of Task 2.
 
 Run with uv from the root of the directory using:
 
-uv run 02-code/01-data_processing/scripts/generate_call2_dataset.py
+uv run code/data_processing/generate_call2_dataset.py
 
 Author: Anthony Tricarico
 Email: tricarico672@gmail.com
