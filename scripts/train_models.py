@@ -21,6 +21,9 @@ Experiment selection:
                               no_model, five_predictors,
                               all_features_with_confidence_scaled,
                               pca_predictors, pca_with_model.
+
+Author: Anthony Tricarico
+Email: tricarico672@gmail.com
 """
 
 from __future__ import annotations

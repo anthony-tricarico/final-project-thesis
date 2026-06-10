@@ -1,12 +1,9 @@
-# /// script
-# requires-python = ">=3.12"
-# dependencies = [
-#     "numpy",
-#     "pydantic",
-#     "torch",
-#     "transformers",
-# ]
-# ///
+"""
+Pydantic v2 schemas for all four experimental calls (Call 1–4) of the MATHANX study.
+
+Author: Anthony Tricarico
+Email: tricarico672@gmail.com
+"""
 
 import json
 import re

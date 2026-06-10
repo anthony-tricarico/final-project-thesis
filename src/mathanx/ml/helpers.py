@@ -1,3 +1,13 @@
+"""
+ML training helpers for the mathanx project.
+
+Provides custom transformers (FrequencyEncoder, CategoricalHasher),
+pipeline builders, experiment orchestration, and SHAP analysis utilities.
+
+Author: Anthony Tricarico
+Email: tricarico672@gmail.com
+"""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
