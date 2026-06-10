@@ -61,6 +61,7 @@ def extract_scales_to_dataframe(base_directory: str) -> pd.DataFrame:
                 # Iterate through each item number and grab the rating
                 for item_num, item_details in items.items():
                     rating = item_details.get("rating")
+                    why = item_details.get("why")
 
                     # Append the flattened data to our list
                     extracted_data.append({
@@ -69,7 +70,8 @@ def extract_scales_to_dataframe(base_directory: str) -> pd.DataFrame:
                         "Model": model_name,
                         "scale": scale_name,
                         "item number": item_num,
-                        "rating": rating
+                        "rating": rating,
+                        "why": why
                     })
 
     # Convert the list of dictionaries into a pandas DataFrame

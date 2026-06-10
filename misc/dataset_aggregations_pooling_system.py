@@ -155,26 +155,31 @@ def _(df_call2_cleaned):
 @app.cell
 def _(df_call2_cleaned):
     # 1. Pivot the dataframe
-    # We include both 'run_id' and 'Model' in the index to retain them as static identifiers.
-    # We pass both 'scale' and 'item number' to columns to create the combinations.
+    # Update 'values' to include both the 'rating' and 'why' columns
     df_wide_call2 = df_call2_cleaned.pivot(
         index=['run_id', 'Model'], 
         columns=['scale', 'item number'], 
-        values='rating'
+        values=['rating', 'why']
     )
 
     # 2. Flatten the MultiIndex columns
-    # df_wide.columns is currently a sequence of tuples like ('maes', 1), ('mseaq', 10)
-    # We use a list comprehension to join them with an underscore.
-    df_wide_call2.columns = [f"{scale}_{item}" for scale, item in df_wide_call2.columns]
+    # The columns are now 3-tuples: (value_name, scale, item_number)
+    # We join them to create column names like 'rating_maes_1' and 'why_maes_1'
+    df_wide_call2.columns = [f"{val}_{scale}_{item}" for val, scale, item in df_wide_call2.columns]
 
     # 3. Reset the index
     # This pulls 'run_id' and 'Model' out of the index and back into standard columns.
     df_wide_call2 = df_wide_call2.reset_index()
 
-    # 4. (Optional) Verify the transformation
+    # 4. Verify the transformation
     df_wide_call2.head()
     return (df_wide_call2,)
+
+
+@app.cell
+def _(df_wide_call2):
+    df_wide_call2.isna().sum()
+    return
 
 
 @app.cell(hide_code=True)
@@ -218,7 +223,8 @@ def _():
 @app.cell
 def _(call1_df):
     # 1. Drop the 'model_name' column so it is not considered in the pivot
-    df_subset = call1_df.drop(columns=['model_name'])
+    z_score_cols = [x for x in call1_df if "z_scores" in x]
+    df_subset = call1_df.drop(columns=['model_name'] + z_score_cols)
 
     # 2. Pivot the dataframe
     # 'run_id' ensures one row per run.
@@ -233,7 +239,8 @@ def _(call1_df):
     df_wide_call1.columns = [f"{col[0]}_{col[1]}" for col in df_wide_call1.columns]
 
     # 4. Reset the index to turn 'run_id' back into a standard column
-    df_wide_call1 = df_wide_call1.reset_index()
+    question_number_cols = [x for x in df_wide_call1.columns if "question_number" in x]
+    df_wide_call1 = df_wide_call1.reset_index().drop(columns = question_number_cols)
 
     # 5. (Optional) Verify the output
     print(len(df_wide_call1))
@@ -253,7 +260,6 @@ def _(mo):
 def _(Path, pd):
     path_persona_dataset = Path("data/processed/demographics/persona_dataset.csv").resolve()
     df_persona = pd.read_csv(path_persona_dataset)
-
     return (df_persona,)
 
 
