@@ -1,3 +1,10 @@
+"""
+Configuration constants for ML experiments in the mathanx project.
+
+Author: Anthony Tricarico
+Email: tricarico672@gmail.com
+"""
+
 from __future__ import annotations
 
 from pathlib import Path

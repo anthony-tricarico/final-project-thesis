@@ -854,7 +854,7 @@ def _(
 
     _fig = _plot_shap_beeswarm(
         shap_values_filtered_all_features_confidence_scaled,
-        f"SHAP beeswarm for {shap_model_name_all_features_confidence_scaled} (All predictors + confidence_scaled, model not plotted)",
+        f"SHAP beeswarm for {shap_model_name_all_features_confidence_scaled} (All predictors, model not plotted)",
     )
 
     _fig.savefig(FIG_PATH / "beeswarm_all_predictors_confidence_scaled_model_excluded.pdf", format="pdf")
@@ -1504,7 +1504,7 @@ def _(
 def _(FIG_PATH, shap_model_name_misc_models, shap_values_misc_models):
     from mathanx.ml.helpers import plot_shap_beeswarm as _plot_shap_beeswarm
 
-    _fig = _plot_shap_beeswarm(shap_values_misc_models, f"SHAP beeswarm for {shap_model_name_misc_models} (misc models, without Model)")
+    _fig = _plot_shap_beeswarm(shap_values_misc_models, f"SHAP beeswarm for {shap_model_name_misc_models} (smaller models, without Model)")
     _fig.savefig(FIG_PATH / "beeswarm_no_model_misc_models.pdf", format="pdf")
     _fig.savefig(FIG_PATH / "beeswarm_no_model_misc_models.png", format="png")
     _fig

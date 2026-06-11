@@ -27,7 +27,7 @@ def _():
     import os
     import sys
     from pathlib import Path
-    from typing import Dict, List, Optional
+    from typing import Any, Dict, List, Optional
 
     import math
     import matplotlib.pyplot as plt
@@ -48,6 +48,7 @@ def _():
     COLOR_PALETTE_1 = "#648fff"
     COLOR_PALETTE_2 = "#fe6100"
     return (
+        Any,
         Call4Schema,
         Dict,
         FIG_PATH,
@@ -307,6 +308,13 @@ def _(JSONExtractor, Path, build_df_call4):
     filtered_data = {k: v for k, v in processed_dict.items() if "call4" in k}
 
     df_confidence_extracted = build_df_call4(filtered_data)
+
+    return
+
+
+@app.cell
+def _():
+    # df_confidence_extracted.to_pickle(Path('data/processed/validations/task-4_accuracy/call4.pkl').resolve().absolute())
     return
 
 
@@ -430,7 +438,7 @@ def _(Optional, Path, np, pd, plt):
         """
         Plots a grouped bar chart comparing accuracy and scaled confidence,
         where bars are side-by-side but have different widths.
-    
+
         Parameters:
         - data: The dataset containing model, accuracy, and confidence metrics.
         - save_path: Directory path to save the SVG.
@@ -496,7 +504,7 @@ def _(Optional, Path, np, pd, plt):
         ax.tick_params(axis='y', labelsize=13)
 
         ax.set_ylim(0, 1.05) 
-    
+
         # ---------------------------------------------------------
         # UPDATED: Use the passed parameters for legend positioning
         # ---------------------------------------------------------
@@ -514,7 +522,7 @@ def _(Optional, Path, np, pd, plt):
             path = Path(save_path).resolve().absolute()
             if not path.is_dir(): raise OSError("Given path is not a directory")
             # bbox_inches="tight" is crucial here, as it ensures the external legend isn't cut off when saving
-            plt.savefig(path.joinpath("accuracy_vs_confidence.svg"), format="svg", bbox_inches="tight")
+            plt.savefig(path.joinpath("accuracy_vs_confidence.pdf"), format="pdf", bbox_inches="tight")
 
         return fig
 
@@ -522,8 +530,8 @@ def _(Optional, Path, np, pd, plt):
 
 
 @app.cell
-def _(grouped_df_model, plot_accuracy_vs_confidence_custom_ci):
-    plot_accuracy_vs_confidence_custom_ci(grouped_df_model)
+def _(FIG_PATH, grouped_df_model, plot_accuracy_vs_confidence_custom_ci):
+    plot_accuracy_vs_confidence_custom_ci(grouped_df_model, save_path=FIG_PATH)
     return
 
 

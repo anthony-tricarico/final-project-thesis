@@ -664,6 +664,99 @@ def _(FIG_PATH, TARGET, ml_df, pearsonr, plt, sns, target_pearson):
     return
 
 
+@app.cell
+def _(TARGET, ml_df, pearsonr, plt, sns, target_pearson):
+    _top_features = list(filter(lambda x: x == "confidence", target_pearson["feature"].tolist()))
+    print(_top_features)
+
+    _n_cols = 1
+    _n_rows = 1
+    _fig, _axes = plt.subplots(
+        _n_rows, _n_cols, figsize=(_n_cols * 3.2, _n_rows * 2.8)
+    )
+    # _axes = _axes.flatten()
+
+
+    _ax = _axes
+    _data = ml_df[["confidence", TARGET]].dropna()
+    sns.regplot(
+        data=_data,
+        x="confidence",
+        y=TARGET,
+        scatter_kws={"alpha": 0.15, "s": 8, "color": "steelblue"},
+        line_kws={"color": "red", "linewidth": 1.5},
+        lowess=False,
+        ax=_ax,
+    )
+    _r, _p = pearsonr(_data["confidence"], _data[TARGET])
+    _p_str = f"p={_p:.2e}" if _p < 0.001 else f"p={_p:.4f}"
+    _ax.set_title(f"{"confidence"}  (r={_r:.3f}, {_p_str})", fontsize=9)
+    _ax.set_xlabel("")
+
+    # _fig.suptitle("Top 8 Features vs. Accuracy (with OLS fit)", fontsize=13)
+    _fig.tight_layout()
+    # _fig.savefig(FIG_PATH / "top_features_vs_accuracy.pdf", format="pdf")
+    # _fig.savefig(FIG_PATH / "top_features_vs_accuracy.png", format="png")
+    plt.show()
+    return
+
+
+@app.cell
+def _(FIG_PATH, TARGET, ml_df, plt, sns):
+    _g = sns.lmplot(
+        data=ml_df,
+        x="confidence",
+        y=TARGET,
+        col="Model",
+        col_wrap=4,
+        scatter_kws={"alpha": 0.15, "s": 8, "color": "steelblue"},
+        line_kws={"color": "red", "linewidth": 1},
+        lowess=False,
+        height=2.5,
+        aspect=1.1,
+        sharex=True,
+        sharey=True,
+    )
+    _g.fig.subplots_adjust(top=0.9)
+    _g.fig.suptitle("Confidence vs Accuracy — Faceted by Model", fontsize=13)
+    _g.savefig(FIG_PATH / "confidence_vs_accuracy_by_model.pdf", format="pdf")
+    _g.savefig(FIG_PATH / "confidence_vs_accuracy_by_model.png", format="png")
+    plt.show()
+    return
+
+
+@app.cell
+def _(TARGET, ml_df, pd, spearmanr):
+    _rows = []
+    for _model in sorted(ml_df["Model"].unique()):
+        _sub = ml_df[ml_df["Model"] == _model]
+        _r, _p = spearmanr(_sub["confidence"], _sub[TARGET])
+        _rows.append(
+            {
+                "Model": _model,
+                "n": len(_sub),
+                "r": round(_r, 4),
+                "p": _p,
+                "sig": "***"
+                if _p < 0.001
+                else "**"
+                if _p < 0.01
+                else "*"
+                if _p < 0.05
+                else "ns",
+            }
+        )
+    results_corr_confidence_acc_model = pd.DataFrame(_rows)
+    results_corr_confidence_acc_model
+    return (results_corr_confidence_acc_model,)
+
+
+@app.cell
+def _(results_corr_confidence_acc_model):
+    print(results_corr_confidence_acc_model.to_latex(index=False, escape=True))
+    return
+
+
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
@@ -867,6 +960,61 @@ def _(FIG_PATH, plt, psych_corr, sns):
     _fig.tight_layout()
     _fig.savefig(FIG_PATH / "psychometric_correlation_heatmap.pdf", format="pdf")
     _fig.savefig(FIG_PATH / "psychometric_correlation_heatmap.png", format="png")
+    plt.show()
+    return
+
+
+@app.cell
+def _(FIG_PATH, TARGET, ml_df, pd, plt, psych_cols, sns, spearmanr):
+    _data = ml_df[psych_cols + [TARGET]].dropna()
+    _vars = psych_cols + [TARGET]
+
+    _rho = pd.DataFrame(index=_vars, columns=_vars, dtype=float)
+    _pval = pd.DataFrame(index=_vars, columns=_vars, dtype=float)
+
+    # Calculate correlations and p-values
+    for _c1 in _vars:
+        for _c2 in _vars:
+            _r, _p = spearmanr(_data[_c1], _data[_c2])
+            _rho.loc[_c1, _c2] = _r
+            _pval.loc[_c1, _c2] = _p
+
+    _annot = pd.DataFrame(index=_vars, columns=_vars, dtype=object)
+
+    # Format annotations: rho for lower triangle/diagonal, p-values for upper triangle
+    for _i, _c1 in enumerate(_vars):
+        for _j, _c2 in enumerate(_vars):
+            if _i >= _j:
+                _annot.loc[_c1, _c2] = f"{_rho.loc[_c1, _c2]:.3f}"
+            else:
+                _p = _pval.loc[_c1, _c2]
+                _stars = "***" if _p < 0.001 else "**" if _p < 0.01 else "*" if _p < 0.05 else ""
+                _p_str = "<0.001" if _p < 0.001 else f"{_p:.3f}"
+                _annot.loc[_c1, _c2] = f"{_p_str}{_stars}"
+
+    _fig, _ax = plt.subplots(figsize=(5, 4))
+
+    # Plot heatmap without the mask
+    sns.heatmap(
+        _rho,
+        annot=_annot,
+        fmt="",
+        cmap=sns.diverging_palette(250, 10, as_cmap=True),
+        vmin=-1,
+        vmax=1,
+        center=0,
+        square=True,
+        linewidths=0.5,
+        annot_kws={"size": 8},
+        ax=_ax,
+    )
+
+    _ax.set_title("Psychometric Score Correlations", fontsize=11)
+    _fig.tight_layout()
+
+    # Save and show
+    _fig.savefig(FIG_PATH / "psychometric_spearman_heatmap.pdf", format="pdf")
+    _fig.savefig(FIG_PATH / "psychometric_spearman_heatmap.png", format="png")
     plt.show()
     return
 
