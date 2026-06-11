@@ -280,6 +280,34 @@ def _(df_persona):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
+    # Add edge lists
+    """)
+    return
+
+
+@app.cell
+def _(Path, pd):
+    path_edge_lists_wide = Path("data/processed/edge_list_wide.csv")
+    df_edge_lists_wide = pd.read_csv(path_edge_lists_wide)
+    return (df_edge_lists_wide,)
+
+
+@app.cell
+def _(df_edge_lists_wide):
+    df_edge_lists_wide.head()
+    return
+
+
+@app.cell
+def _(df_edge_lists_wide):
+    final_df_edge_lists = df_edge_lists_wide.drop(columns=["model"])
+    final_df_edge_lists.head()
+    return (final_df_edge_lists,)
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
     # final dataset merge
     """)
     return
@@ -292,12 +320,19 @@ def _(df_wide_call2):
 
 
 @app.cell
-def _(df_persona_renamed, df_wide_call1, df_wide_call2, df_wide_call4):
+def _(
+    df_persona_renamed,
+    df_wide_call1,
+    df_wide_call2,
+    df_wide_call4,
+    final_df_edge_lists,
+):
     from mathanx.constants import FOLDER_NAME_MAPPING
     final_merged = df_wide_call1 \
         .merge(df_wide_call2, how="inner", on="run_id") \
         .merge(df_wide_call4, how="inner", on="run_id") \
-        .merge(df_persona_renamed, how="left", on="run_id")
+        .merge(df_persona_renamed, how="left", on="run_id") \
+        .merge(final_df_edge_lists, how="left", on="run_id")
 
     final_merged["Model"] = final_merged["Model"].map(FOLDER_NAME_MAPPING)
     return (final_merged,)

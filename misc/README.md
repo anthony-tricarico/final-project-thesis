@@ -228,3 +228,97 @@ The dataset is stored as Apache Parquet with snappy compression at:
 ```
 data/processed/validations/df_pooling_system.parquet
 ```
+
+---
+
+# Edge List Wide Dataset
+
+## Overview
+
+The **Edge List Wide Dataset** (`data/processed/edge_list_wide.csv`) is a single wide-format CSV that pivots the Call 3 Forma Mentis semantic-network data from edge-list (long) form into a run_id-level table. Each row represents one experimental run.
+
+It was produced by `misc/extract_edge_list_wide.py`.
+
+| Property | Value |
+|----------|-------|
+| Rows | 27,987 |
+| Columns | 352 |
+| Format | CSV |
+| Size (disk) | ~53 MB |
+
+## Source Data
+
+The raw edge lists reside in `data/processed/NEW_edge_list_individual/`. For each model there is a subdirectory containing one folder per `run_id`, each holding a single `edgelist.csv` with four columns:
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `cue_word` | `str` | One of 50 cue words |
+| `association_word` | `str` | Free-association provided by the LLM |
+| `cue_valence` | `int` | Valence of the cue word (−1, 0, +1) |
+| `associated_valence` | `int` | Valence of the association word (−1, 0, +1) |
+
+Each `run_id` contains 48–50 cues, each with 1–3 associations (most have all 3).
+
+## Extraction
+
+`misc/extract_edge_list_wide.py` iterates over every model folder and every `run_id` folder inside it, reads the `edgelist.csv`, and pivots from long to wide:
+
+1. Group rows by `cue_word` (preserving row order within each cue).
+2. For each cue, up to 3 associations and their corresponding associated valences are placed in numbered columns (`association_1` … `association_3`).
+3. The shared `cue_valence` is stored in a single column.
+4. Cues with fewer than 3 associations receive `NaN` in the missing slots.
+5. All rows are concatenated and written to a single CSV.
+
+## Schema — 352 columns
+
+### Identifiers (2 columns)
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `run_id` | `str` | Unique run identifier |
+| `model` | `str` | Model folder name (e.g. `MANX_LLM_anitamistral`) |
+
+### Per-cue columns (7 columns × 50 cues = 350 columns)
+
+For every cue word `{cue}` the following columns are created:
+
+| Pattern | Count | Type | Description |
+|---------|-------|------|-------------|
+| `{cue}_association_{1..3}` | 3 | `str` | Association word (`NaN` if fewer than 3) |
+| `{cue}_valence` | 1 | `int64` | Cue word valence (same for all associations of this cue) |
+| `{cue}_associated_valence_{1..3}` | 3 | `float64` | Per-association valence (`NaN` if fewer than 3) |
+
+### Cue words by category
+
+The 50 cue words, grouped thematically:
+
+| Category | Cues |
+|----------|------|
+| **Math domain knowledge** | `mathematic`, `equation`, `number`, `theorem`, `proof` |
+| **Computational thinking** | `informatic`, `algorithm`, `computation`, `problem - solve`, `variable` |
+| **Artificial intelligence** | `ai`, `llm`, `model`, `chatgpt`, `datum` |
+| **Academic assessment** | `exam`, `grade`, `homework`, `failure`, `success` |
+| **Academic context** | `class`, `lecture`, `study`, `classroom`, `blackboard` |
+| **Work context** | `job`, `career`, `work`, `society`, `future` |
+| **STEM fields** | `stem`, `science`, `physics`, `chemistry`, `biology` |
+| **Non-STEM fields** | `art`, `music`, `literature`, `history`, `philosophy` |
+| **Skills** | `creativity`, `experiment`, `logic`, `anxiety`, `teamwork` |
+| **Actors** | `professor`, `teacher`, `student`, `knowledge`, `scientist` |
+
+## Usage
+
+```python
+import pandas as pd
+
+df = pd.read_csv("data/processed/edge_list_wide.csv")
+```
+
+---
+
+## File Format
+
+The dataset is stored as a plain CSV file at:
+
+```
+data/processed/edge_list_wide.csv
+```
