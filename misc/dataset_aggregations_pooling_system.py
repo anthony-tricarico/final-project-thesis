@@ -302,7 +302,7 @@ def _(df_edge_lists_wide):
 def _(df_edge_lists_wide):
     final_df_edge_lists = df_edge_lists_wide.drop(columns=["model"])
     final_df_edge_lists.head()
-    return (final_df_edge_lists,)
+    return
 
 
 @app.cell(hide_code=True)
@@ -320,19 +320,13 @@ def _(df_wide_call2):
 
 
 @app.cell
-def _(
-    df_persona_renamed,
-    df_wide_call1,
-    df_wide_call2,
-    df_wide_call4,
-    final_df_edge_lists,
-):
+def _(df_persona_renamed, df_wide_call1, df_wide_call2, df_wide_call4):
     from mathanx.constants import FOLDER_NAME_MAPPING
     final_merged = df_wide_call1 \
         .merge(df_wide_call2, how="inner", on="run_id") \
         .merge(df_wide_call4, how="inner", on="run_id") \
-        .merge(df_persona_renamed, how="left", on="run_id") \
-        .merge(final_df_edge_lists, how="left", on="run_id")
+        .merge(df_persona_renamed, how="left", on="run_id") # \
+        # .merge(final_df_edge_lists, how="left", on="run_id")
 
     final_merged["Model"] = final_merged["Model"].map(FOLDER_NAME_MAPPING)
     return (final_merged,)
@@ -371,7 +365,7 @@ def _(final_merged, path_call1_dataset):
 @app.cell
 def _(path_call1_dataset, pd):
     df_test = pd.read_parquet(path_call1_dataset.parent.parent / "df_pooling_system.parquet")
-    df_test.head()
+    df_test
     return
 
 
