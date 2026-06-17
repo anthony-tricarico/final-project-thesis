@@ -6,6 +6,7 @@ app = marimo.App(width="medium")
 
 @app.cell
 def _():
+    import json
     from pathlib import Path
 
     import marimo as mo
@@ -13,7 +14,7 @@ def _():
     import numpy as np
 
 
-    return Path, mo, pd
+    return Path, json, mo, pd
 
 
 @app.cell(hide_code=True)
@@ -280,7 +281,7 @@ def _(df_persona):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    # Add edge lists
+    # Add edge lists (deprecated)
     """)
     return
 
@@ -308,6 +309,59 @@ def _(df_edge_lists_wide):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
+    # Add edge dicts
+    """)
+    return
+
+
+@app.cell
+def _(Path, json, pd):
+    path_edge_dict = Path("data/processed/edge_list_dict.json")
+    path_valence_dict = Path("data/processed/valence_dict.json")
+
+    with open(path_edge_dict) as f:
+        edge_dict = json.load(f)
+    with open(path_valence_dict) as f:
+        valence_dict = json.load(f)
+
+    df_edge_dict = pd.DataFrame([
+        {"run_id": k, "edges": v} for k, v in edge_dict.items()
+    ])
+
+    df_valence_dict = (
+        pd.DataFrame.from_dict(valence_dict, orient="index")
+        .reset_index()
+        .rename(columns={"index": "run_id"})
+    )
+    df_edge_dict["edges"] = [[tuple(edge) for edge in row] for row in df_edge_dict["edges"]]
+    return df_edge_dict, df_valence_dict
+
+
+@app.cell
+def _(df_edge_dict):
+    df_edge_dict.head()
+    return
+
+
+@app.cell
+def _(df_edge_dict):
+    # Grab the very first edge pair from the very first row
+    first_edge = df_edge_dict["edges"].iloc[0][0]
+
+    print(first_edge)
+    print(type(first_edge))
+    return
+
+
+@app.cell
+def _(df_valence_dict):
+    df_valence_dict.head()
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
     # final dataset merge
     """)
     return
@@ -320,13 +374,21 @@ def _(df_wide_call2):
 
 
 @app.cell
-def _(df_persona_renamed, df_wide_call1, df_wide_call2, df_wide_call4):
+def _(
+    df_edge_dict,
+    df_persona_renamed,
+    df_valence_dict,
+    df_wide_call1,
+    df_wide_call2,
+    df_wide_call4,
+):
     from mathanx.constants import FOLDER_NAME_MAPPING
     final_merged = df_wide_call1 \
         .merge(df_wide_call2, how="inner", on="run_id") \
         .merge(df_wide_call4, how="inner", on="run_id") \
-        .merge(df_persona_renamed, how="left", on="run_id") # \
-        # .merge(final_df_edge_lists, how="left", on="run_id")
+        .merge(df_persona_renamed, how="left", on="run_id") \
+        .merge(df_edge_dict, how="left", on="run_id") \
+        .merge(df_valence_dict, how="left", on="run_id")
 
     final_merged["Model"] = final_merged["Model"].map(FOLDER_NAME_MAPPING)
     return (final_merged,)
@@ -347,6 +409,12 @@ def _(final_merged):
 @app.cell
 def _(final_merged):
     final_merged.isna().sum()
+    return
+
+
+@app.cell
+def _(final_merged):
+    final_merged[final_merged["rating_maes_1"].isna()][["run_id", "Model"]]
     return
 
 
