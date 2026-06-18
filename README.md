@@ -391,3 +391,12 @@ The `misc/` directory contains documentation for the **Pooling System Dataset** 
 ## License
 
 This project is licensed under the terms specified in the repository license file.
+
+## Note on LLM usage
+
+The author declares that he used LLMs to support with coding tasks including:
+
+- code reviews
+- performance optimizations
+
+The ideas underlying the implementations provided in the code are the author's. 
