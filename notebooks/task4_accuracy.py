@@ -308,7 +308,6 @@ def _(JSONExtractor, Path, build_df_call4):
     filtered_data = {k: v for k, v in processed_dict.items() if "call4" in k}
 
     df_confidence_extracted = build_df_call4(filtered_data)
-
     return
 
 
@@ -375,6 +374,93 @@ def _(df_confidence, group_compute_stats):
     grouped_df_model = group_compute_stats(df_confidence, ["model", "question_id"])
     grouped_df_model.head()
     return (grouped_df_model,)
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ### Create dataset split by gender
+    """)
+    return
+
+
+@app.cell
+def _(df_confidence):
+    df_confidence.head()
+    return
+
+
+@app.cell
+def _(df_confidence):
+    df_confidence_human = df_confidence.query("mode == 'human'")
+    len(df_confidence_human) // 18
+    return (df_confidence_human,)
+
+
+@app.cell
+def _(df_confidence_human, group_compute_stats):
+    grouped_df_gender = group_compute_stats(df_confidence_human, ["model", "gender", "question_id"])
+    grouped_df_gender
+    return (grouped_df_gender,)
+
+
+@app.cell
+def _(grouped_df_gender):
+    grouped_df_gender_man = grouped_df_gender[grouped_df_gender["gender"] == "man"]
+    grouped_df_gender_woman = grouped_df_gender[grouped_df_gender["gender"] == "woman"]
+    grouped_df_gender_transgender = grouped_df_gender[grouped_df_gender["gender"] == "transgender"]
+    grouped_df_gender_agender = grouped_df_gender[grouped_df_gender["gender"] == "agender"]
+    grouped_df_gender_genderqueer = grouped_df_gender[grouped_df_gender["gender"] == "genderqueer"]
+    grouped_df_gender_nonbinary = grouped_df_gender[grouped_df_gender["gender"] == "non-binary"]
+    return (
+        grouped_df_gender_agender,
+        grouped_df_gender_genderqueer,
+        grouped_df_gender_man,
+        grouped_df_gender_nonbinary,
+        grouped_df_gender_transgender,
+        grouped_df_gender_woman,
+    )
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ### Create dataset for math haters
+    """)
+    return
+
+
+@app.cell
+def _(Path, df_confidence_human, pd):
+    # first merge with demographics dataset
+
+    path_demo = Path("data/processed/ml/ml_dataset.csv").resolve()
+
+    # read demo data
+
+    df_demo = pd.read_csv(path_demo)
+
+    # merge
+
+    df_confidence_math = df_confidence_human.merge(df_demo[["run_id", "math_lover_flg", "math_hater_flg"]], how = "inner", on = "run_id")
+
+    return (df_confidence_math,)
+
+
+@app.cell
+def _(df_confidence_math):
+    len(df_confidence_math)
+    return
+
+
+@app.cell
+def _(df_confidence_math, group_compute_stats):
+    df_math_haters = df_confidence_math.query("math_hater_flg == 1")
+    df_math_lovers = df_confidence_math.query("math_lover_flg == 1")
+
+    df_grouped_math_haters = group_compute_stats(df_math_haters, ["model", "question_id"])
+    df_grouped_math_lovers = group_compute_stats(df_math_lovers, ["model", "question_id"])
+    return df_grouped_math_haters, df_grouped_math_lovers
 
 
 @app.cell(hide_code=True)
@@ -580,6 +666,194 @@ def _(
     _fig = plot_accuracy_vs_confidence_custom_ci(grouped_df_model_mode_llm)
     _fig.savefig(FIG_PATH / "confidence_vs_accuracy_llm.pdf")
     _fig
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## Splitting by gender
+    """)
+    return
+
+
+@app.cell
+def _(FIG_PATH, grouped_df_gender_man, plot_accuracy_vs_confidence_custom_ci):
+    _fig = plot_accuracy_vs_confidence_custom_ci(grouped_df_gender_man)
+    _fig.axes[0].set_facecolor("#caf0f8")  
+    _fig.savefig(
+        FIG_PATH / "confidence_vs_accuracy_gender_man.pdf"
+    )
+
+    _fig
+    return
+
+
+@app.cell
+def _(
+    FIG_PATH,
+    grouped_df_gender_woman,
+    plot_accuracy_vs_confidence_custom_ci,
+):
+    _fig = plot_accuracy_vs_confidence_custom_ci(grouped_df_gender_woman)
+    _fig.axes[0].set_facecolor("#ffe5ec")  
+    _fig.savefig(FIG_PATH / "confidence_vs_accuracy_gender_woman.pdf")
+
+    _fig
+    return
+
+
+@app.cell
+def _(
+    FIG_PATH,
+    grouped_df_gender_transgender,
+    plot_accuracy_vs_confidence_custom_ci,
+):
+    _fig = plot_accuracy_vs_confidence_custom_ci(grouped_df_gender_transgender)
+    _fig.savefig(FIG_PATH / "confidence_vs_accuracy_gender_transgender.pdf")
+    _fig
+    return
+
+
+@app.cell
+def _(
+    FIG_PATH,
+    grouped_df_gender_agender,
+    plot_accuracy_vs_confidence_custom_ci,
+):
+    _fig = plot_accuracy_vs_confidence_custom_ci(grouped_df_gender_agender)
+    _fig.savefig(FIG_PATH / "confidence_vs_accuracy_gender_agender.pdf")
+    _fig
+    return
+
+
+@app.cell
+def _(
+    FIG_PATH,
+    grouped_df_gender_genderqueer,
+    plot_accuracy_vs_confidence_custom_ci,
+):
+    _fig = plot_accuracy_vs_confidence_custom_ci(grouped_df_gender_genderqueer)
+    _fig.savefig(FIG_PATH / "confidence_vs_accuracy_gender_genderqueer.pdf")
+    _fig
+    return
+
+
+@app.cell
+def _(
+    FIG_PATH,
+    grouped_df_gender_nonbinary,
+    plot_accuracy_vs_confidence_custom_ci,
+):
+    _fig = plot_accuracy_vs_confidence_custom_ci(grouped_df_gender_nonbinary)
+    _fig.savefig(FIG_PATH / "confidence_vs_accuracy_gender_nonbinary.pdf")
+    _fig
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## Math lovers vs haters
+    """)
+    return
+
+
+@app.cell
+def _(FIG_PATH, df_grouped_math_haters, plot_accuracy_vs_confidence_custom_ci):
+    _fig = plot_accuracy_vs_confidence_custom_ci(df_grouped_math_haters)
+    _fig.savefig(FIG_PATH / "confidence_vs_accuracy_math_haters.pdf")
+    _fig
+    return
+
+
+@app.cell
+def _(FIG_PATH, df_grouped_math_lovers, plot_accuracy_vs_confidence_custom_ci):
+    _fig = plot_accuracy_vs_confidence_custom_ci(df_grouped_math_lovers)
+    _fig.savefig(FIG_PATH / "confidence_vs_accuracy_math_lovers.pdf")
+    _fig
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    # Dataset exports
+    """)
+    return
+
+
+@app.function
+def agg_data(data):
+    """function extracted from the plots above"""
+
+    agg_df = data.groupby("model").agg(
+        Accuracy=("accuracy", "mean"),
+        Confidence=("confidence_scaled", "mean"),
+        # Conf_SEM=("confidence_scaled", "sem")
+    ).reset_index()
+
+    # agg_df["Conf_CI"] = agg_df["Conf_SEM"] * 1.96
+    agg_df = agg_df.sort_values(by="Accuracy", ascending=False).set_index("model")
+
+    return agg_df
+
+
+@app.function
+def agg_data_intervals(data):
+    """function extracted from the plots above"""
+
+    agg_df = data.groupby("model").agg(
+        Accuracy=("accuracy", "mean"),
+        Confidence=("confidence_scaled", "mean"),
+        Conf_SEM=("confidence_scaled", "sem")
+    ).reset_index()
+
+    agg_df["Conf_CI"] = agg_df["Conf_SEM"] * 1.96
+    agg_df = agg_df.sort_values(by="Accuracy", ascending=False).set_index("model")
+
+    return agg_df
+
+
+@app.cell
+def _(Path):
+    store_data_path = Path("data/processed/validations/task-4_accuracy/accuracies").resolve()
+    return (store_data_path,)
+
+
+@app.cell
+def _(grouped_df_gender_man, store_data_path):
+    agg_data(grouped_df_gender_man).to_csv(store_data_path / "man_accuracies.csv")
+    return
+
+
+@app.cell
+def _(grouped_df_gender_woman, store_data_path):
+    agg_data(grouped_df_gender_woman).to_csv(store_data_path / "woman_accuracies.csv")
+    return
+
+
+@app.cell
+def _(df_grouped_math_lovers, store_data_path):
+    agg_data(df_grouped_math_lovers).to_csv(store_data_path / "math_lovers_accuracies.csv")
+    return
+
+
+@app.cell
+def _(df_grouped_math_haters, store_data_path):
+    agg_data(df_grouped_math_haters).to_csv(store_data_path / "math_haters_accuracies.csv")
+    return
+
+
+@app.cell
+def _(df_grouped_math_lovers, store_data_path):
+    agg_data_intervals(df_grouped_math_lovers).to_csv(store_data_path / "math_lovers_accuracies_err.csv")
+    return
+
+
+@app.cell
+def _(df_grouped_math_haters, store_data_path):
+    agg_data_intervals(df_grouped_math_haters).to_csv(store_data_path / "math_haters_accuracies_err.csv")
     return
 
 
