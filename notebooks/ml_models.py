@@ -865,14 +865,33 @@ def _(
 
 @app.cell
 def _(
+    FIG_PATH,
     shap_model_name_all_features_confidence_scaled,
     shap_values_filtered_all_features_confidence_scaled,
 ):
     from mathanx.ml.helpers import plot_shap_bar as _plot_shap_bar
 
-    _plot_shap_bar(
+    _fig = _plot_shap_bar(
         shap_values_filtered_all_features_confidence_scaled,
         f"Global SHAP importance for {shap_model_name_all_features_confidence_scaled} (without Model)",
+    )
+
+    _fig.savefig(FIG_PATH / "barplot_all_predictors_confidence_scaled.pdf", format="pdf")
+    _fig.savefig(FIG_PATH / "barplot_all_predictors_confidence_scaled.png", format="png")
+    _fig
+    return
+
+
+@app.cell
+def _(
+    shap_model_name_all_features_confidence_scaled,
+    shap_values_all_features_confidence_scaled,
+):
+    from mathanx.ml.helpers import plot_shap_beeswarm as _plot_shap_beeswarm
+
+    _plot_shap_beeswarm(
+        shap_values_all_features_confidence_scaled,
+        f"SHAP beeswarm for {shap_model_name_all_features_confidence_scaled}",
     )
     return
 
@@ -883,30 +902,16 @@ def _(
     shap_model_name_all_features_confidence_scaled,
     shap_values_all_features_confidence_scaled,
 ):
-    from mathanx.ml.helpers import plot_shap_beeswarm as _plot_shap_beeswarm
-
-    _fig = _plot_shap_beeswarm(
-        shap_values_all_features_confidence_scaled,
-        f"SHAP beeswarm for {shap_model_name_all_features_confidence_scaled}",
-    )
-
-    _fig.savefig(FIG_PATH / "beeswarm_all_predictors_confidence_scaled.pdf", format="pdf")
-    _fig.savefig(FIG_PATH / "beeswarm_all_predictors_confidence_scaled.png", format="png")
-    _fig
-    return
-
-
-@app.cell
-def _(
-    shap_model_name_all_features_confidence_scaled,
-    shap_values_all_features_confidence_scaled,
-):
     from mathanx.ml.helpers import plot_shap_bar as _plot_shap_bar
 
-    _plot_shap_bar(
+    _fig = _plot_shap_bar(
         shap_values_all_features_confidence_scaled,
         f"Global SHAP importance for {shap_model_name_all_features_confidence_scaled}",
     )
+
+    _fig.savefig(FIG_PATH / "barplot_all_predictors_confidence_scaled.pdf", format="pdf")
+    _fig.savefig(FIG_PATH / "barplot_all_predictors_confidence_scaled.png", format="png")
+    _fig
     return
 
 

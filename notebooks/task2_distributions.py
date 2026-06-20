@@ -54,7 +54,7 @@ def _():
     import pandas as pd
     import matplotlib.pyplot as plt
     from matplotlib.patches import Patch
-    from scipy.stats import gaussian_kde
+    from scipy.stats import gaussian_kde, mannwhitneyu, false_discovery_control
 
     from mathanx.constants import FOLDER_NAME_MAPPING
     from mathanx.ml.config import FIG_PATH
@@ -68,7 +68,9 @@ def _():
         Path,
         color_human,
         color_llm,
+        false_discovery_control,
         gaussian_kde,
+        mannwhitneyu,
         np,
         pd,
         plt,
@@ -548,6 +550,95 @@ def _(FIG_PATH, create_custom_ridgeline_sorted, df_viz_anxiety):
 def _(FIG_PATH, create_custom_ridgeline_sorted, df_viz_self_efficacy):
     create_custom_ridgeline_sorted(df_viz_self_efficacy, target_scale="mseaq_se", scale_col="scale",
                             model_col="Model", mode_col="mode", score_col="sum_of_scores", save_path=FIG_PATH, custom_name="mseaq_se_sorted")
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## Human vs LLM: Mann-Whitney U tests
+
+    We use the **Mann-Whitney U test** (non-parametric, suitable for Likert sum-scores) to compare human and LLM distributions for each psychometric scale, within each model. The **rank-biserial correlation** \( r = 1 - 2U/(n_1 n_2) \) is the effect size.
+
+    **Benjamini-Hochberg** (FDR) correction is applied across all 56 comparisons (4 scales × 14 models). Significance is assessed at \( q < 0.05 \).
+    """)
+    return
+
+
+@app.cell
+def _(df_wide, false_discovery_control, mannwhitneyu, np, pd):
+    scale_cols = ["amas_score", "maes_score", "mseaq_anx", "mseaq_se"]
+    scale_labels = {
+        "amas_score": "AMAS", "maes_score": "MAES",
+        "mseaq_anx": "MSEAQ-Anx", "mseaq_se": "MSEAQ-SE"
+    }
+    models = np.sort(df_wide["Model"].unique())
+
+    rows = []
+    for scale in scale_cols:
+        for model in models:
+            human = df_wide[(df_wide["Model"] == model) & (df_wide["mode"] == "human")][scale].dropna()
+            llm = df_wide[(df_wide["Model"] == model) & (df_wide["mode"] == "llm")][scale].dropna()
+            if len(human) < 2 or len(llm) < 2:
+                continue
+            u_stat, p_val = mannwhitneyu(human, llm, alternative="two-sided")
+            n1, n2 = len(human), len(llm)
+            r_val = 1 - (2 * u_stat) / (n1 * n2)
+            rows.append({
+                "Scale": scale_labels[scale],
+                "Model": model,
+                "N_human": n1, "N_llm": n2,
+                "M_human": round(human.mean(), 2),
+                "M_llm": round(llm.mean(), 2),
+                "Mdn_human": int(human.median()),
+                "Mdn_llm": int(llm.median()),
+                "U": int(u_stat),
+                "p": p_val,
+                "r": round(r_val, 3)
+            })
+
+    results_df = pd.DataFrame(rows)
+    results_df["q"] = false_discovery_control(results_df["p"], method="bh")
+    results_df["sig"] = results_df["q"].apply(
+        lambda x: "***" if x < 0.001 else ("**" if x < 0.01 else ("*" if x < 0.05 else "")))
+    results_df
+    return (results_df,)
+
+
+@app.cell
+def _(results_df):
+    cols_to_keep = ["Scale", "Model", "U", "r", "sig"]
+
+    results_df_amas = results_df.query("Scale == 'AMAS'")[cols_to_keep]
+    results_df_amas["p"] = results_df_amas["sig"].apply(lambda x: "p < 0.001" if x == "***" else ("p < 0.01" if x == "**" else ("p < 0.05" if x == "*" else "p > 0.05")))
+
+    final_amas = results_df_amas.drop(columns = ["sig"])
+    final_amas
+    return cols_to_keep, final_amas
+
+
+@app.cell
+def _(cols_to_keep, results_df):
+
+    results_df_mses = results_df.query("Scale == 'MAES'")[cols_to_keep]
+    results_df_mses["p"] = results_df_mses["sig"].apply(lambda x: "p < 0.001" if x == "***" else ("p < 0.01" if x == "**" else ("p < 0.05" if x == "*" else "p > 0.05")))
+
+    final_mses = results_df_mses.drop(columns = ["sig"])
+    final_mses
+    return (final_mses,)
+
+
+@app.cell
+def _(final_mses):
+    # export to latex
+
+    print(final_mses.to_latex(escape=True))
+    return
+
+
+@app.cell
+def _(final_amas):
+    print(final_amas.to_latex(escape=True))
     return
 
 
