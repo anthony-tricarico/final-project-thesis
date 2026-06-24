@@ -589,9 +589,10 @@ def _(FIG_PATH, ml_df, pd, plt, sns, spearmanr):
 
 @app.cell
 def _(FIG_PATH, leaves_list, linkage, pearson_corr, plt, sns):
-    _link = linkage(pearson_corr, method="average", metric="euclidean")
+    _clean = pearson_corr.fillna(0)
+    _link = linkage(_clean, method="average", metric="euclidean")
     _order = leaves_list(_link)
-    _clustered = pearson_corr.iloc[_order, _order]
+    _clustered = _clean.iloc[_order, _order]
 
     _fig, _ax = plt.subplots(figsize=(10, 8))
     _cmap = sns.diverging_palette(250, 10, as_cmap=True)
@@ -2235,6 +2236,122 @@ def _(pca, scaler):
     PCA_TRANSFORM_PATH.parent.mkdir(parents=True, exist_ok=True)
     joblib.dump({"scaler": scaler, "pca": pca}, PCA_TRANSFORM_PATH)
     print(f"PCA saved to {PCA_TRANSFORM_PATH}")
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## 18. AMAS Score vs Accuracy — Combined by Architectural Lineage
+    """)
+    return
+
+
+@app.cell
+def _(FIG_PATH, TARGET, ml_df, pearsonr, plt, sns):
+    from mathanx.ml.config import MODEL_FAMILIES
+    # import matplotlib.pyplot as plt
+    # import seaborn as sns
+    # from scipy.stats import pearsonr
+
+    _model_to_family = {}
+    for _family, _models in MODEL_FAMILIES.items():
+        for _m in _models:
+            _model_to_family[_m] = _family
+
+    _family_config = {
+        "qwen3_family": {"color": "royalblue", "label": "Qwen3"},
+        "mistral_family": {"color": "darkorange", "label": "Mistral"},
+        "best_performers": {"color": "mediumpurple", "label": "Best Performers"},
+        "misc_models": {"color": "teal", "label": "Other Models"},
+    }
+
+    _data = ml_df[["amas_score", TARGET, "Model"]].dropna().copy()
+    _data["family"] = _data["Model"].map(_model_to_family)
+
+    _fig = plt.figure(figsize=(10, 7))
+    _gs = _fig.add_gridspec(
+        2, 2,
+        width_ratios=[4, 1],
+        height_ratios=[1, 4],
+        wspace=0.05,
+        hspace=0.05,
+    )
+    _ax = _fig.add_subplot(_gs[1, 0])
+    _ax_top = _fig.add_subplot(_gs[0, 0], sharex=_ax)
+    _ax_right = _fig.add_subplot(_gs[1, 1], sharey=_ax)
+
+    for _fam, _cfg in _family_config.items():
+        _sub = _data[_data["family"] == _fam]
+        _ax.scatter(
+            _sub["amas_score"],
+            _sub[TARGET],
+            c=_cfg["color"],
+            alpha=0.15,
+            s=5,
+            label=_cfg["label"],
+        )
+
+    _x_global = _data["amas_score"]
+    _y_global = _data[TARGET]
+    _r_global, _ = pearsonr(_x_global, _y_global)
+    sns.regplot(
+        x=_x_global,
+        y=_y_global,
+        scatter=False,
+        line_kws={"color": "black", "linewidth": 3, "linestyle": "--"},
+        ax=_ax,
+        label=f"Global Trend (r = {_r_global:.3f})",
+    )
+
+    for _fam, _cfg in _family_config.items():
+        _sub = _data[_data["family"] == _fam]
+        if len(_sub) > 5:
+            sns.regplot(
+                x=_sub["amas_score"],
+                y=_sub[TARGET],
+                scatter=False,
+                line_kws={"color": _cfg["color"], "linewidth": 1.5},
+                ax=_ax,
+            )
+
+    # _ax.set_xlabel("AMAS Score")
+    # _ax.set_ylabel("Accuracy")
+    _ax.legend(fontsize=9, loc="lower right")
+
+    # --- TOP KDE PLOT ---
+    for _fam, _cfg in _family_config.items():
+        _sub = _data[_data["family"] == _fam]
+        if len(_sub) > 5:
+            sns.kdeplot(
+                data=_sub, x="amas_score",
+                color=_cfg["color"],
+                fill=True, alpha=0.25,
+                linewidth=1.2,
+                ax=_ax_top,
+            )
+    # Clear seaborn's automatic labels and hide tick labels
+    _ax_top.set(xlabel=None, ylabel=None)
+    _ax_top.tick_params(labelbottom=False)
+
+    # --- RIGHT KDE PLOT ---
+    for _fam, _cfg in _family_config.items():
+        _sub = _data[_data["family"] == _fam]
+        if len(_sub) > 5:
+            sns.kdeplot(
+                data=_sub, y=TARGET,
+                color=_cfg["color"],
+                fill=True, alpha=0.25,
+                linewidth=1.2,
+                ax=_ax_right,
+            )
+    # Clear seaborn's automatic labels and hide tick labels
+    _ax_right.set(xlabel=None, ylabel=None)
+    _ax_right.tick_params(labelleft=False)
+
+    _fig.savefig(FIG_PATH / "amas_vs_accuracy_by_lineage.pdf", format="pdf")
+    _fig.savefig(FIG_PATH / "amas_vs_accuracy_by_lineage.png", format="png")
+    plt.show()
     return
 
 
