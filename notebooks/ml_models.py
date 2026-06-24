@@ -1041,6 +1041,56 @@ def _(FIG_PATH, shap_model_name_no_model, shap_values_no_model):
 
 
 @app.cell
+def _(shap):
+    from typing import Iterable
+
+    def filter_shap_values(shap_values, features_to_include: Iterable) -> shap.Explanation:
+        """
+        This function is used to extract only specific features from SHAP explanations.
+
+        This is useful when plotting only a subset of variables in the SHAP beeswarm plots.
+
+        Example:
+            # Extract only the psychometric variables for the no_model experiment.
+        
+            filter_shap_values(shap_values_no_model, ("mseaq_se", "mseaq_anx" ,"amas_score", "maes_score"))
+        """
+
+        # get the indices corresponding to features to include only
+        indices = [i for i, name in enumerate(shap_values.feature_names) 
+                            if name in features_to_include]
+    
+        filtered_shap = shap.Explanation(
+            values=shap_values.values[:, indices],
+            base_values=shap_values.base_values,
+            data=shap_values.data[:, indices] if shap_values.data is not None else None,
+            feature_names=[shap_values.feature_names[i] for i in indices],
+        )
+
+        return filtered_shap
+
+    return (filter_shap_values,)
+
+
+@app.cell
+def _(
+    FIG_PATH,
+    filter_shap_values,
+    shap_model_name_no_model,
+    shap_values_no_model,
+):
+    from mathanx.ml.helpers import plot_shap_beeswarm as _plot_shap_beeswarm
+
+    shap_values_filtered_no_model = filter_shap_values(shap_values_no_model, ("mseaq_se", "mseaq_anx" ,"amas_score", "maes_score"))
+
+    _fig = _plot_shap_beeswarm(shap_values_filtered_no_model, f"SHAP beeswarm for {shap_model_name_no_model} (All Models Pooled)")
+    _fig.savefig(FIG_PATH / "beeswarm_no_model_psychometric.pdf", format="pdf")
+    _fig.savefig(FIG_PATH / "beeswarm_no_model_psychometric.png", format="png")
+    _fig
+    return
+
+
+@app.cell
 def _(shap_model_name_no_model, shap_values_no_model):
     from mathanx.ml.helpers import plot_shap_bar as _plot_shap_bar
 
@@ -1157,6 +1207,24 @@ def _(FIG_PATH, shap_model_name_mistral, shap_values_mistral):
     _fig = _plot_shap_beeswarm(shap_values_mistral, f"SHAP beeswarm for {shap_model_name_mistral} (Mistral family, without Model)")
     _fig.savefig(FIG_PATH / "beeswarm_no_model_mistral_family.pdf", format="pdf")
     _fig.savefig(FIG_PATH / "beeswarm_no_model_mistral_family.png", format="png")
+    _fig
+    return
+
+
+@app.cell
+def _(
+    FIG_PATH,
+    filter_shap_values,
+    shap_model_name_mistral,
+    shap_values_mistral,
+):
+    from mathanx.ml.helpers import plot_shap_beeswarm as _plot_shap_beeswarm
+
+    shap_values_filtered_mistral = filter_shap_values(shap_values_mistral, ("mseaq_se", "mseaq_anx" ,"amas_score", "maes_score"))
+
+    _fig = _plot_shap_beeswarm(shap_values_filtered_mistral, f"SHAP beeswarm for {shap_model_name_mistral} (Mistral Family)")
+    _fig.savefig(FIG_PATH / "beeswarm_mistral_psychometric.pdf", format="pdf")
+    _fig.savefig(FIG_PATH / "beeswarm_mistral_psychometric.png", format="png")
     _fig
     return
 
@@ -1287,6 +1355,26 @@ def _(shap_model_name_qwen3, shap_values_qwen3):
     from mathanx.ml.helpers import plot_shap_bar as _plot_shap_bar
 
     _plot_shap_bar(shap_values_qwen3, f"Global SHAP importance for {shap_model_name_qwen3} (Qwen3 family, without Model)")
+    return
+
+
+@app.cell
+def _(FIG_PATH, shap, shap_model_name, shap_values_qwen3):
+    from mathanx.ml.helpers import plot_shap_beeswarm as _plot_shap_beeswarm
+
+    indices_qwen3 = [i for i, name in enumerate(shap_values_qwen3.feature_names) if name in ("mseaq_se", "mseaq_anx" ,"amas_score", "maes_score")]
+    shap_values_filtered_qwen3 = shap.Explanation(
+        values=shap_values_qwen3.values[:, indices_qwen3],
+        base_values=shap_values_qwen3.base_values,
+        data=shap_values_qwen3.data[:, indices_qwen3] if shap_values_qwen3.data is not None else None,
+        feature_names=[shap_values_qwen3.feature_names[i] for i in indices_qwen3],
+    )
+
+    _fig = _plot_shap_beeswarm(shap_values_filtered_qwen3, f"SHAP beeswarm for {shap_model_name} (Qwen3 Family)")
+
+    _fig.savefig(FIG_PATH / "beeswarm_qwen3_psychometric_variables.pdf", format="pdf")
+    _fig.savefig(FIG_PATH / "beeswarm_qwen3_psychometric_variables.png", format="png")
+    _fig
     return
 
 
@@ -1512,6 +1600,24 @@ def _(FIG_PATH, shap_model_name_misc_models, shap_values_misc_models):
     _fig = _plot_shap_beeswarm(shap_values_misc_models, f"SHAP beeswarm for {shap_model_name_misc_models} (smaller models, without Model)")
     _fig.savefig(FIG_PATH / "beeswarm_no_model_misc_models.pdf", format="pdf")
     _fig.savefig(FIG_PATH / "beeswarm_no_model_misc_models.png", format="png")
+    _fig
+    return
+
+
+@app.cell
+def _(
+    FIG_PATH,
+    filter_shap_values,
+    shap_model_name_misc_models,
+    shap_values_misc_models,
+):
+    from mathanx.ml.helpers import plot_shap_beeswarm as _plot_shap_beeswarm
+
+    shap_values_filtered_misc = filter_shap_values(shap_values_misc_models, ("mseaq_se", "mseaq_anx" ,"amas_score", "maes_score"))
+
+    _fig = _plot_shap_beeswarm(shap_values_filtered_misc, f"SHAP beeswarm for {shap_model_name_misc_models} (Smaller Models)")
+    _fig.savefig(FIG_PATH / "beeswarm_misc_psychometric.pdf", format="pdf")
+    _fig.savefig(FIG_PATH / "beeswarm_misc_psychometric.png", format="png")
     _fig
     return
 
